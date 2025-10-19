@@ -1,0 +1,47 @@
+# Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'payment-processor'
+    static_configs:
+      - targets: ['payment-processor:3001']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  - job_name: 'reconciliation-service'
+    static_configs:
+      - targets: ['reconciliation-service:3002']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  - job_name: 'postgres-payment'
+    static_configs:
+      - targets: ['payment-db:5432']
+    scrape_interval: 30s
+
+  - job_name: 'postgres-reconciliation'
+    static_configs:
+      - targets: ['reconciliation-db:5433']
+    scrape_interval: 30s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+
+
+
+

@@ -1,0 +1,40 @@
+# Multi-stage Dockerfile for Payment Processor
+FROM rust:1.75 as builder
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY shared ./shared
+COPY payment-processor ./payment-processor
+
+# Build the application
+RUN cargo build --release --bin payment-processor
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the binary from builder stage
+COPY --from=builder /app/target/release/payment-processor /app/payment-processor
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# Run the application
+CMD ["./payment-processor"]
+
+
+
+
+
