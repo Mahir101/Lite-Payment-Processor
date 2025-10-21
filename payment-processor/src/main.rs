@@ -1,3 +1,17 @@
+//! # Payment Processor Service
+//! 
+//! This module contains the main application for the Payment Processor service.
+//! It handles HTTP routing, request processing, and service orchestration.
+//! 
+//! ## Key Responsibilities:
+//! - Transaction lifecycle management
+//! - User and account management
+//! - Card validation and fraud detection
+//! - Payment processing via Visa API
+//! - Real-time WebSocket updates
+//! - JWT-based authentication
+//! - Health monitoring and metrics
+
 use anyhow::Result;
 use axum::{
     extract::{Path, Query, State, ws::WebSocketUpgrade},
@@ -40,21 +54,57 @@ use user_management::UserService;
 use visa_api::VisaApiClient;
 use websocket::WebSocketManager;
 
+/// Application state containing all service dependencies
+/// 
+/// This struct holds references to all the services and components
+/// needed by the HTTP handlers. It's cloned for each request handler
+/// to provide access to database connections, Redis client, authentication
+/// service, and other business logic components.
 #[derive(Clone)]
 pub struct AppState {
+    /// Database service for transaction and user data operations
     pub db: DatabaseService,
+    /// Redis client for caching and pub/sub operations
     pub redis: RedisService,
+    /// JWT authentication service for token management
     pub auth: AuthService,
+    /// State machine for managing transaction lifecycle
     pub state_machine: TransactionStateMachine,
+    /// WebSocket manager for real-time updates
     pub ws_manager: std::sync::Arc<WebSocketManager>,
+    /// User management service for user and account operations
     pub user_service: UserService,
+    /// Fraud detection service for security checks
     pub fraud_detector: std::sync::Arc<FraudDetector>,
+    /// Visa API client for external payment processing
     pub visa_client: std::sync::Arc<VisaApiClient>,
 }
 
+/// Main application entry point
+/// 
+/// This function initializes the Payment Processor service by:
+/// 1. Setting up structured logging with tracing
+/// 2. Initializing Prometheus metrics collection
+/// 3. Creating all service dependencies (database, Redis, auth, etc.)
+/// 4. Starting the outbox processor background task
+/// 5. Configuring HTTP routes and middleware
+/// 6. Starting the HTTP server on port 3001
+/// 
+/// # Returns
+/// 
+/// Returns `Result<()>` - Ok if the service starts successfully, Err if initialization fails
+/// 
+/// # Errors
+/// 
+/// This function can fail if:
+/// - Database connection fails
+/// - Redis connection fails
+/// - HTTP server binding fails
+/// - Service initialization fails
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
+    // Initialize structured logging with tracing
+    // This sets up JSON-formatted logs with thread information for better debugging
     tracing_subscriber::fmt()
         .with_target(false)
         .with_thread_ids(true)
@@ -63,10 +113,12 @@ async fn main() -> Result<()> {
 
     info!("Starting Payment Processor Service");
 
-    // Initialize metrics
+    // Initialize Prometheus metrics collection
+    // This registers all metric collectors for monitoring
     metrics::init_metrics();
 
-    // Initialize services
+    // Initialize all service dependencies
+    // Each service is created with its required configuration
     let db = DatabaseService::new().await?;
     let redis = RedisService::new().await?;
     let auth = AuthService::new();
@@ -76,6 +128,7 @@ async fn main() -> Result<()> {
     let fraud_detector = std::sync::Arc::new(FraudDetector::new());
     let visa_client = std::sync::Arc::new(VisaApiClient::new("demo_api_key".to_string()));
 
+    // Create application state with all services
     let app_state = AppState {
         db,
         redis,
@@ -87,7 +140,8 @@ async fn main() -> Result<()> {
         visa_client,
     };
 
-    // Start outbox processor
+    // Start outbox processor background task
+    // This ensures reliable event publishing using the outbox pattern
     let outbox_service = outbox::OutboxService::new(app_state.db.pool.clone());
     let outbox_processor = outbox::OutboxProcessor::new(outbox_service, app_state.redis.clone());
     tokio::spawn(async move {
@@ -96,27 +150,37 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Build application
+    // Build HTTP application with all routes and middleware
     let app = Router::new()
+        // Health and monitoring endpoints
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics_handler))
+        .route("/ws", get(websocket_handler))
+        
+        // Transaction management endpoints
         .route("/transactions", post(create_transaction))
         .route("/transactions/:id", get(get_transaction))
         .route("/transactions/:id/commit", post(commit_transaction))
         .route("/transactions/:id/fail", post(fail_transaction))
         .route("/transactions/:id/cancel", post(cancel_transaction))
         .route("/transactions", get(list_transactions))
-        .route("/ws", get(websocket_handler))
-        .route("/metrics", get(metrics_handler))
-        // New card and user management endpoints
+        
+        // User management endpoints
         .route("/users", post(create_user))
         .route("/users/:id", get(get_user))
         .route("/users/:id/verify", post(verify_user))
         .route("/users/:id/accounts", get(get_user_accounts))
+        
+        // Account management endpoints
         .route("/accounts", post(create_account))
         .route("/accounts/:number", get(get_account))
+        
+        // Payment processing endpoints
         .route("/transfer", post(transfer_money))
         .route("/validate-card", post(validate_card))
         .route("/visa-payment", post(process_visa_payment))
+        
+        // Add application state and middleware
         .with_state(app_state)
         .layer(
             ServiceBuilder::new()
@@ -124,6 +188,7 @@ async fn main() -> Result<()> {
                 .layer(CorsLayer::permissive()),
         );
 
+    // Start HTTP server on port 3001
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
     info!("Payment Processor Service listening on port 3001");
     
@@ -131,15 +196,39 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+/// Health check endpoint for service monitoring
+/// 
+/// This function performs comprehensive health checks on all service dependencies
+/// and returns the overall health status. It's used by load balancers, monitoring
+/// systems, and orchestration platforms to determine if the service is ready to
+/// handle requests.
+/// 
+/// # Process:
+/// 1. Checks database connectivity and performance
+/// 2. Checks Redis connectivity and performance  
+/// 3. Determines overall service health based on dependency status
+/// 4. Returns structured health information with timestamps
+/// 
+/// # Parameters:
+/// - `state`: Application state containing all service dependencies
+/// 
+/// # Returns:
+/// - `Json<ApiResponse<HealthCheck>>`: Structured health check response
+/// 
+/// # Health Status Logic:
+/// - `Healthy`: All dependencies are operational
+/// - `Degraded`: Some dependencies have issues but service can function
+/// - `Unhealthy`: Critical dependencies are down, service should not receive traffic
 async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthCheck>> {
     let mut dependencies = HashMap::new();
     
-    // Check database
+    // Check database connectivity and performance
+    // This performs a simple query to verify the database is responsive
     match state.db.health_check().await {
         Ok(_) => {
             dependencies.insert("database".to_string(), shared::DependencyHealth {
                 status: HealthStatus::Healthy,
-                response_time_ms: Some(10),
+                response_time_ms: Some(10), // Estimated response time
                 last_check: Utc::now(),
             });
         }
@@ -153,12 +242,13 @@ async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthC
         }
     }
 
-    // Check Redis
+    // Check Redis connectivity and performance
+    // This performs a PING command to verify Redis is responsive
     match state.redis.health_check().await {
         Ok(_) => {
             dependencies.insert("redis".to_string(), shared::DependencyHealth {
                 status: HealthStatus::Healthy,
-                response_time_ms: Some(5),
+                response_time_ms: Some(5), // Estimated response time
                 last_check: Utc::now(),
             });
         }
@@ -172,6 +262,8 @@ async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthC
         }
     }
 
+    // Determine overall service health based on dependency status
+    // Priority: Unhealthy > Degraded > Healthy
     let overall_status = if dependencies.values().any(|d| d.status == HealthStatus::Unhealthy) {
         HealthStatus::Unhealthy
     } else if dependencies.values().any(|d| d.status == HealthStatus::Degraded) {
@@ -180,6 +272,7 @@ async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthC
         HealthStatus::Healthy
     };
 
+    // Create comprehensive health check response
     let health = HealthCheck {
         service: "payment-processor".to_string(),
         status: overall_status,
@@ -191,13 +284,47 @@ async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthC
     Json(ApiResponse::success(health))
 }
 
+/// Creates a new payment transaction
+/// 
+/// This function handles the creation of new payment transactions with comprehensive
+/// validation, idempotency checking, and event publishing. It ensures that duplicate
+/// requests are handled correctly and that all stakeholders are notified of the transaction.
+/// 
+/// # Process:
+/// 1. Validates idempotency using Redis to prevent duplicate transactions
+/// 2. Creates the transaction in the database with PENDING state
+/// 3. Sets idempotency lock to prevent duplicate processing
+/// 4. Emits transaction created event for downstream processing
+/// 5. Broadcasts real-time update to WebSocket clients
+/// 6. Returns the created transaction details
+/// 
+/// # Parameters:
+/// - `state`: Application state containing all service dependencies
+/// - `payload`: Payment request containing transaction details
+/// 
+/// # Returns:
+/// - `Ok(Json<ApiResponse<Transaction>>)`: Success with transaction details
+/// - `Err((StatusCode, Json<ApiResponse<()>>))`: Error with appropriate HTTP status
+/// 
+/// # Idempotency:
+/// Uses Redis to check if a transaction with the same external_id already exists.
+/// If it does, the request is rejected to prevent duplicate processing.
+/// 
+/// # Event Publishing:
+/// Uses the outbox pattern to ensure reliable event publishing. Events are stored
+/// in the database transaction and published asynchronously.
+/// 
+/// # Real-time Updates:
+/// Broadcasts transaction creation to all connected WebSocket clients for
+/// real-time dashboard updates.
 async fn create_transaction(
     State(state): State<AppState>,
     Json(payload): Json<PaymentRequest>,
 ) -> Result<Json<ApiResponse<Transaction>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Creating transaction for external_id: {}", payload.external_id);
 
-    // Check idempotency
+    // Check idempotency to prevent duplicate transactions
+    // This ensures that the same external_id cannot be processed twice
     let idempotency_key = format!("txn:{}", payload.external_id);
     if let Err(e) = state.redis.check_idempotency(&idempotency_key).await {
         warn!("Idempotency check failed: {}", e);
@@ -207,20 +334,24 @@ async fn create_transaction(
         ));
     }
 
-    // Create transaction
+    // Create transaction in database with atomic operation
+    // This includes adding the transaction to the outbox for event publishing
     match state.db.create_transaction(payload).await {
         Ok(transaction) => {
-            // Set idempotency lock
+            // Set idempotency lock to prevent duplicate processing
+            // This lock expires after 5 minutes to handle edge cases
             if let Err(e) = state.redis.set_idempotency_lock(&idempotency_key, &transaction.id).await {
                 warn!("Failed to set idempotency lock: {}", e);
             }
 
-            // Emit event
+            // Emit transaction created event for downstream processing
+            // This event will be consumed by the reconciliation service
             if let Err(e) = state.db.emit_event(&transaction, TransactionEventType::Created).await {
                 warn!("Failed to emit event: {}", e);
             }
 
-            // Broadcast to WebSocket clients
+            // Broadcast real-time update to WebSocket clients
+            // This enables live dashboard updates for transaction monitoring
             state.ws_manager.broadcast_transaction_created(&transaction).await;
 
             info!("Transaction created successfully: {}", transaction.id);
@@ -236,6 +367,31 @@ async fn create_transaction(
     }
 }
 
+/// Retrieves a transaction by its unique identifier
+/// 
+/// This function fetches a transaction from the database using its UUID.
+/// It's used for transaction lookups, status checks, and detailed transaction views.
+/// 
+/// # Process:
+/// 1. Queries the database for the transaction by UUID
+/// 2. Returns the transaction if found
+/// 3. Returns 404 if transaction doesn't exist
+/// 4. Returns 500 if database query fails
+/// 
+/// # Parameters:
+/// - `state`: Application state containing database service
+/// - `id`: UUID of the transaction to retrieve
+/// 
+/// # Returns:
+/// - `Ok(Json<ApiResponse<Transaction>>)`: Transaction details if found
+/// - `Err(404, ...)`: Transaction not found
+/// - `Err(500, ...)`: Database error
+/// 
+/// # Use Cases:
+/// - Transaction status checking
+/// - Transaction details display
+/// - Audit trail lookups
+/// - Customer service inquiries
 async fn get_transaction(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -256,6 +412,35 @@ async fn get_transaction(
     }
 }
 
+/// Commits a pending transaction to completed state
+/// 
+/// This function transitions a transaction from PENDING to COMMITTED state using
+/// the transaction state machine. It ensures that only valid state transitions
+/// are allowed and emits appropriate events for downstream processing.
+/// 
+/// # Process:
+/// 1. Validates that the transaction exists and is in PENDING state
+/// 2. Uses state machine to validate the transition is allowed
+/// 3. Updates transaction state to COMMITTED in database
+/// 4. Emits state change event for reconciliation service
+/// 5. Returns updated transaction details
+/// 
+/// # Parameters:
+/// - `state`: Application state containing state machine and database
+/// - `id`: UUID of the transaction to commit
+/// 
+/// # Returns:
+/// - `Ok(Json<ApiResponse<Transaction>>)`: Updated transaction with COMMITTED state
+/// - `Err(400, ...)`: Invalid state transition or transaction not found
+/// 
+/// # State Machine Rules:
+/// - Only PENDING transactions can be committed
+/// - COMMITTED, FAILED, and CANCELLED are terminal states
+/// - State transitions are atomic and consistent
+/// 
+/// # Event Publishing:
+/// Emits a StateChanged event that will be consumed by the reconciliation
+/// service to update the event-sourced ledger.
 async fn commit_transaction(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -275,6 +460,37 @@ async fn commit_transaction(
     }
 }
 
+/// Marks a transaction as failed with a reason
+/// 
+/// This function transitions a transaction from PENDING to FAILED state using
+/// the transaction state machine. It's used when a transaction cannot be
+/// completed due to various reasons (insufficient funds, fraud detection, etc.).
+/// 
+/// # Process:
+/// 1. Validates that the transaction exists and is in PENDING state
+/// 2. Uses state machine to validate the transition is allowed
+/// 3. Updates transaction state to FAILED with failure reason
+/// 4. Emits failure event for reconciliation service
+/// 5. Returns updated transaction details
+/// 
+/// # Parameters:
+/// - `state`: Application state containing state machine and database
+/// - `id`: UUID of the transaction to mark as failed
+/// 
+/// # Returns:
+/// - `Ok(Json<ApiResponse<Transaction>>)`: Updated transaction with FAILED state
+/// - `Err(400, ...)`: Invalid state transition or transaction not found
+/// 
+/// # Failure Reasons:
+/// - Manual failure (admin intervention)
+/// - Insufficient funds
+/// - Fraud detection
+/// - Card validation failure
+/// - External API errors
+/// 
+/// # Event Publishing:
+/// Emits a Failed event with the reason that will be consumed by the
+/// reconciliation service for audit and reporting purposes.
 async fn fail_transaction(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

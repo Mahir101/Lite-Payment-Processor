@@ -8,16 +8,26 @@ services:
       POSTGRES_DB: payment_processor
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     ports:
       - "5432:5432"
     volumes:
       - payment_db_data:/var/lib/postgresql/data
       - ./migrations/001_payment_processor_schema.sql:/docker-entrypoint-initdb.d/001_payment_processor_schema.sql
+      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/002_monitoring_queries.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_processor"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=1000
+      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
 
   # PostgreSQL Database for Reconciliation Service
   reconciliation-db:
@@ -26,16 +36,26 @@ services:
       POSTGRES_DB: reconciliation
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     ports:
       - "5433:5432"
     volumes:
       - reconciliation_db_data:/var/lib/postgresql/data
-      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/002_reconciliation_schema.sql
+      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/001_reconciliation_schema.sql
+      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/002_monitoring_queries.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d reconciliation"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=1000
+      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
 
   # Redis for caching and pub/sub
   redis:
@@ -95,6 +115,25 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Database Monitoring Service (Optional)
+  db-monitor:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: monitoring
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/001_monitoring_setup.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - monitoring
 
   # Prometheus for metrics (optional)
   prometheus:

@@ -1,12 +1,71 @@
+//! # Card Validation Module
+//! 
+//! This module provides comprehensive card validation and fraud detection services
+//! for the Payment Processor. It implements industry-standard validation algorithms
+//! and security checks to ensure payment card integrity and prevent fraud.
+//! 
+//! ## Key Features:
+//! - Luhn algorithm for card number validation
+//! - Expiry date validation
+//! - CVV validation based on card type
+//! - Billing address validation
+//! - Card type detection (Visa, Mastercard, Amex, Discover)
+//! - Card number masking for security
+//! - Fraud detection with pattern matching
+//! - Blocked card management
+//! 
+//! ## Security Features:
+//! - PCI DSS compliant card handling
+//! - Card number masking for logs and display
+//! - Fraud pattern detection
+//! - Blocked card database
+//! - User verification checks
+
 use shared::{CardInfo, PaymentError, BillingAddress};
 use std::collections::HashMap;
 use chrono::Datelike;
 
-/// Card validation utilities
+/// Card validation utilities providing comprehensive card validation services
+/// 
+/// This struct contains static methods for validating payment cards using
+/// industry-standard algorithms and security checks. All methods are stateless
+/// and can be called concurrently.
 pub struct CardValidator;
 
 impl CardValidator {
-    /// Validates a card using Luhn algorithm
+    /// Validates a card number using the Luhn algorithm
+    /// 
+    /// The Luhn algorithm (also known as the "modulus 10" algorithm) is a simple
+    /// checksum formula used to validate a variety of identification numbers,
+    /// most notably credit card numbers. It detects any single-digit error and
+    /// most adjacent digit transposition errors.
+    /// 
+    /// # Algorithm:
+    /// 1. Remove all non-digit characters from the PAN
+    /// 2. Check that the length is between 13-19 digits
+    /// 3. Starting from the rightmost digit, double every second digit
+    /// 4. If doubling results in a two-digit number, add the digits together
+    /// 5. Sum all the digits
+    /// 6. If the sum is divisible by 10, the card number is valid
+    /// 
+    /// # Parameters:
+    /// - `pan`: Primary Account Number (card number) to validate
+    /// 
+    /// # Returns:
+    /// - `Ok(())`: Card number is valid
+    /// - `Err(PaymentError::InvalidCard)`: Card number is invalid
+    /// 
+    /// # Supported Lengths:
+    /// - Visa: 13-19 digits
+    /// - Mastercard: 16 digits
+    /// - American Express: 15 digits
+    /// - Discover: 16 digits
+    /// 
+    /// # Example:
+    /// ```rust
+    /// assert!(CardValidator::validate_card_number("4242424242424242").is_ok());
+    /// assert!(CardValidator::validate_card_number("4242424242424243").is_err());
+    /// ```
     pub fn validate_card_number(pan: &str) -> Result<(), PaymentError> {
         // Remove spaces and non-digits
         let cleaned_pan: String = pan.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -39,7 +98,36 @@ impl CardValidator {
         Ok(())
     }
 
-    /// Validates card expiry date
+    /// Validates card expiry date to ensure the card is not expired
+    /// 
+    /// This function checks that the card's expiry date is valid and that the
+    /// card has not expired. It validates the month range and compares against
+    /// the current date to ensure the card is still valid for use.
+    /// 
+    /// # Parameters:
+    /// - `month`: Expiry month (1-12)
+    /// - `year`: Expiry year (4-digit year)
+    /// 
+    /// # Returns:
+    /// - `Ok(())`: Expiry date is valid and card is not expired
+    /// - `Err(PaymentError::InvalidCard)`: Invalid month or card has expired
+    /// 
+    /// # Validation Rules:
+    /// - Month must be between 1 and 12
+    /// - Year must be current year or later
+    /// - If year is current year, month must be current month or later
+    /// 
+    /// # Example:
+    /// ```rust
+    /// // Valid future date
+    /// assert!(CardValidator::validate_expiry(12, 2025).is_ok());
+    /// 
+    /// // Expired card
+    /// assert!(CardValidator::validate_expiry(1, 2020).is_err());
+    /// 
+    /// // Invalid month
+    /// assert!(CardValidator::validate_expiry(13, 2025).is_err());
+    /// ```
     pub fn validate_expiry(month: u8, year: u16) -> Result<(), PaymentError> {
         if month < 1 || month > 12 {
             return Err(PaymentError::InvalidCard("Invalid expiry month".to_string()));

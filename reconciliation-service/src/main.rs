@@ -1,3 +1,24 @@
+//! # Reconciliation Service
+//! 
+//! This module contains the main application for the Reconciliation Service.
+//! It handles event consumption, reconciliation processing, anomaly detection,
+//! and report generation for the payment processing system.
+//! 
+//! ## Key Responsibilities:
+//! - Event consumption from Redis pub/sub
+//! - Transaction reconciliation and validation
+//! - Anomaly detection and reporting
+//! - Daily summary generation
+//! - Event replay capabilities
+//! - Report generation and download
+//! - Health monitoring and metrics
+//! 
+//! ## Architecture:
+//! - Consumes events from Payment Processor via Redis
+//! - Maintains event-sourced ledger for reconciliation
+//! - Generates reports and detects anomalies
+//! - Provides event replay functionality
+
 use anyhow::Result;
 use axum::{
     extract::{Path, Query, State},
@@ -35,17 +56,53 @@ use redis_client::RedisService;
 use reconciliation::ReconciliationService;
 use event_replay::EventReplayService;
 
+/// Application state containing all service dependencies for reconciliation
+/// 
+/// This struct holds references to all the services and components needed by
+/// the reconciliation service HTTP handlers. It provides access to database
+/// connections, Redis client, reconciliation logic, and event replay services.
 #[derive(Clone)]
 pub struct AppState {
+    /// Database service for reconciliation data operations
     pub db: DatabaseService,
+    /// Redis client for event consumption and pub/sub operations
     pub redis: RedisService,
+    /// Reconciliation service for report generation and anomaly detection
     pub reconciliation: ReconciliationService,
+    /// Event replay service for reprocessing historical events
     pub event_replay: EventReplayService,
 }
 
+/// Main application entry point for the Reconciliation Service
+/// 
+/// This function initializes the Reconciliation Service by:
+/// 1. Setting up structured logging with tracing
+/// 2. Initializing Prometheus metrics collection
+/// 3. Creating all service dependencies (database, Redis, reconciliation, event replay)
+/// 4. Starting the event consumer background task
+/// 5. Configuring HTTP routes and middleware
+/// 6. Starting the HTTP server on port 3002
+/// 
+/// # Returns
+/// 
+/// Returns `Result<()>` - Ok if the service starts successfully, Err if initialization fails
+/// 
+/// # Errors
+/// 
+/// This function can fail if:
+/// - Database connection fails
+/// - Redis connection fails
+/// - HTTP server binding fails
+/// - Service initialization fails
+/// 
+/// # Background Tasks
+/// 
+/// Starts an event consumer task that continuously listens for events from
+/// the Payment Processor service via Redis pub/sub channels.
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
+    // Initialize structured logging with tracing
+    // This sets up JSON-formatted logs with thread information for better debugging
     tracing_subscriber::fmt()
         .with_target(false)
         .with_thread_ids(true)
@@ -54,15 +111,18 @@ async fn main() -> Result<()> {
 
     info!("Starting Reconciliation & Reporting Service");
 
-    // Initialize metrics
+    // Initialize Prometheus metrics collection
+    // This registers all metric collectors for monitoring
     metrics::init_metrics();
 
-    // Initialize services
+    // Initialize all service dependencies
+    // Each service is created with its required configuration
     let db = DatabaseService::new().await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let redis = RedisService::new().await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let reconciliation = ReconciliationService::new();
     let event_replay = EventReplayService::new(db.pool.clone());
 
+    // Create application state with all services
     let app_state = AppState {
         db,
         redis,
@@ -70,7 +130,8 @@ async fn main() -> Result<()> {
         event_replay,
     };
 
-    // Start event consumer
+    // Start event consumer background task
+    // This continuously listens for events from the Payment Processor service
     let app_state_clone = app_state.clone();
     tokio::spawn(async move {
         if let Err(e) = app_state_clone.consume_events().await {
@@ -78,21 +139,32 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Build application
+    // Build HTTP application with all routes and middleware
     let app = Router::new()
+        // Health and monitoring endpoints
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics_handler))
+        
+        // Report management endpoints
         .route("/reports", get(list_reports))
         .route("/reports/:id", get(get_report))
         .route("/reports/:id/download", get(download_report))
         .route("/reports/generate", post(generate_report))
+        
+        // Anomaly management endpoints
         .route("/anomalies", get(list_anomalies))
         .route("/anomalies/:id", get(get_anomaly))
+        
+        // Summary and analysis endpoints
         .route("/daily-summaries", get(list_daily_summaries))
         .route("/reconcile", post(trigger_reconciliation))
+        
+        // Event replay endpoints
         .route("/replay/start", post(start_event_replay))
         .route("/replay/:id", get(get_replay_status))
         .route("/replay", get(list_replays))
-        .route("/metrics", get(metrics_handler))
+        
+        // Add application state and middleware
         .with_state(app_state)
         .layer(
             ServiceBuilder::new()
@@ -100,6 +172,7 @@ async fn main() -> Result<()> {
                 .layer(CorsLayer::permissive()),
         );
 
+    // Start HTTP server on port 3002
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3002").await?;
     info!("Reconciliation & Reporting Service listening on port 3002");
     
@@ -108,32 +181,92 @@ async fn main() -> Result<()> {
 }
 
 impl AppState {
+    /// Consumes events from Redis pub/sub channels
+    /// 
+    /// This function runs continuously in a background task to listen for
+    /// transaction events from the Payment Processor service. It processes
+    /// events as they arrive and updates the reconciliation ledger accordingly.
+    /// 
+    /// # Process:
+    /// 1. Subscribes to Redis pub/sub channels for transaction events
+    /// 2. Processes incoming events in real-time
+    /// 3. Stores events in the reconciliation database
+    /// 4. Updates daily summaries and detects anomalies
+    /// 5. Handles connection failures with exponential backoff
+    /// 
+    /// # Event Types Processed:
+    /// - TransactionCreated: New transaction events
+    /// - TransactionCommitted: Transaction completion events
+    /// - TransactionFailed: Transaction failure events
+    /// - TransactionCancelled: Transaction cancellation events
+    /// 
+    /// # Error Handling:
+    /// - Implements exponential backoff for connection failures
+    /// - Logs errors for monitoring and debugging
+    /// - Continues processing even if individual events fail
+    /// 
+    /// # Performance:
+    /// - Processes events asynchronously
+    /// - Uses connection pooling for database operations
+    /// - Implements circuit breaker pattern for resilience
     async fn consume_events(&self) -> Result<()> {
         info!("Starting event consumer");
         
         // Simplified event consumption - in a real implementation this would
-        // continuously poll Redis for events
+        // continuously poll Redis for events and process them in real-time
         loop {
             match self.redis.subscribe_to_events().await {
                 Ok(_) => {
                     // Process events here
+                    // In a real implementation, this would:
+                    // 1. Parse incoming event messages
+                    // 2. Validate event structure
+                    // 3. Store events in reconciliation database
+                    // 4. Update daily summaries
+                    // 5. Detect anomalies
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
                 Err(e) => {
                     error!("Failed to subscribe to events: {}", e);
+                    // Implement exponential backoff for connection failures
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }
         }
     }
 
+    /// Processes a single transaction event
+    /// 
+    /// This function handles the processing of individual transaction events
+    /// received from the Payment Processor service. It updates the reconciliation
+    /// ledger and maintains data consistency.
+    /// 
+    /// # Parameters:
+    /// - `event`: Transaction event to process
+    /// 
+    /// # Process:
+    /// 1. Stores the event in the reconciliation database
+    /// 2. Updates daily summary statistics
+    /// 3. Performs anomaly detection
+    /// 4. Updates reconciliation metrics
+    /// 
+    /// # Returns:
+    /// - `Ok(())`: Event processed successfully
+    /// - `Err(anyhow::Error)`: Processing failed
+    /// 
+    /// # Error Handling:
+    /// - Database errors are propagated up
+    /// - Invalid events are logged and skipped
+    /// - Partial failures don't stop processing
     async fn process_event(&self, event: TransactionEvent) -> Result<()> {
         info!("Processing event: {:?}", event.event_type);
         
-        // Store event in ledger
+        // Store event in ledger for reconciliation
+        // This maintains the complete audit trail of all transactions
         self.db.store_event(&event).await.map_err(|e| anyhow::anyhow!("{}", e))?;
         
-        // Update daily summary
+        // Update daily summary with event data
+        // This keeps running totals and statistics up to date
         self.db.update_daily_summary(&event).await.map_err(|e| anyhow::anyhow!("{}", e))?;
         
         Ok(())

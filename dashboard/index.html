@@ -150,6 +150,183 @@
             color: #e74c3c;
         }
 
+        .database-monitoring-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+        }
+
+        .database-monitoring-section h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .database-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ecf0f1;
+        }
+
+        .database-tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #7f8c8d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .database-tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .database-tab:hover {
+            color: #3498db;
+        }
+
+        .database-content {
+            display: none;
+        }
+
+        .database-content.active {
+            display: block;
+        }
+
+        .database-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .database-metric {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #3498db;
+        }
+
+        .database-metric.warning {
+            border-left-color: #f39c12;
+        }
+
+        .database-metric.danger {
+            border-left-color: #e74c3c;
+        }
+
+        .database-metric.success {
+            border-left-color: #27ae60;
+        }
+
+        .database-metric-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+
+        .database-metric-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .database-activity-log {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 0.9em;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-time {
+            color: #7f8c8d;
+            font-size: 0.8em;
+        }
+
+        .activity-description {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .activity-status {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .database-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
         .transactions-section {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 15px;
@@ -555,6 +732,134 @@
                 <div class="metric">
                     <span class="metric-label">Ledger Events</span>
                     <span class="metric-value" id="ledger-events">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Monitoring Section -->
+        <div class="database-monitoring-section">
+            <h3>
+                <span>🗄️</span>
+                Database Monitoring
+                <span id="db-monitoring-status" class="status-indicator status-offline">
+                    <span class="status-dot"></span>
+                    <span>Offline</span>
+                </span>
+            </h3>
+            
+            <div class="database-controls">
+                <button class="btn btn-primary" onclick="refreshDatabaseMetrics()">Refresh Metrics</button>
+                <button class="btn btn-info" onclick="toggleDatabaseMonitoring()">Toggle Auto-Refresh</button>
+                <button class="btn btn-warning" onclick="generateTestData()">Generate Test Data</button>
+                <button class="btn btn-secondary" onclick="clearActivityLog()">Clear Log</button>
+            </div>
+
+            <div class="database-tabs">
+                <button class="database-tab active" onclick="switchDatabaseTab('payment')">Payment Database</button>
+                <button class="database-tab" onclick="switchDatabaseTab('reconciliation')">Reconciliation Database</button>
+                <button class="database-tab" onclick="switchDatabaseTab('performance')">Performance</button>
+                <button class="database-tab" onclick="switchDatabaseTab('activity')">Activity Log</button>
+            </div>
+
+            <!-- Payment Database Tab -->
+            <div id="payment-db-content" class="database-content active">
+                <div class="database-metrics-grid">
+                    <div class="database-metric" id="payment-total-transactions">
+                        <div class="database-metric-label">Total Transactions</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="payment-pending-transactions">
+                        <div class="database-metric-label">Pending</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric success" id="payment-committed-transactions">
+                        <div class="database-metric-label">Committed</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric danger" id="payment-failed-transactions">
+                        <div class="database-metric-label">Failed</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric warning" id="payment-outbox-events">
+                        <div class="database-metric-label">Outbox Events</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="payment-db-connections">
+                        <div class="database-metric-label">DB Connections</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reconciliation Database Tab -->
+            <div id="reconciliation-db-content" class="database-content">
+                <div class="database-metrics-grid">
+                    <div class="database-metric" id="reconciliation-events-processed">
+                        <div class="database-metric-label">Events Processed</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric warning" id="reconciliation-anomalies">
+                        <div class="database-metric-label">Anomalies</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric success" id="reconciliation-summaries">
+                        <div class="database-metric-label">Daily Summaries</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="reconciliation-runs">
+                        <div class="database-metric-label">Reconciliation Runs</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="reconciliation-db-connections">
+                        <div class="database-metric-label">DB Connections</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="reconciliation-last-run">
+                        <div class="database-metric-label">Last Run</div>
+                        <div class="database-metric-value">Never</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Tab -->
+            <div id="performance-content" class="database-content">
+                <div class="database-metrics-grid">
+                    <div class="database-metric" id="avg-response-time">
+                        <div class="database-metric-label">Avg Response Time</div>
+                        <div class="database-metric-value">0ms</div>
+                    </div>
+                    <div class="database-metric" id="active-queries">
+                        <div class="database-metric-label">Active Queries</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="db-size">
+                        <div class="database-metric-label">Database Size</div>
+                        <div class="database-metric-value">0 MB</div>
+                    </div>
+                    <div class="database-metric" id="cache-hit-ratio">
+                        <div class="database-metric-label">Cache Hit Ratio</div>
+                        <div class="database-metric-value">0%</div>
+                    </div>
+                    <div class="database-metric" id="slow-queries">
+                        <div class="database-metric-label">Slow Queries</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                    <div class="database-metric" id="lock-waits">
+                        <div class="database-metric-label">Lock Waits</div>
+                        <div class="database-metric-value">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log Tab -->
+            <div id="activity-content" class="database-content">
+                <h4>Real-time Database Activity</h4>
+                <div class="database-activity-log" id="database-activity-log">
+                    <div class="activity-item">
+                        <span class="activity-time">--:--:--</span>
+                        <span class="activity-description">Waiting for database activity...</span>
+                        <span class="activity-status status-info">Ready</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1187,10 +1492,236 @@
             }
         }
 
+        // Database Monitoring Functions
+        let databaseMonitoringInterval = null;
+        let isDatabaseMonitoringActive = false;
+        let activityLog = [];
+
+        function switchDatabaseTab(tabName) {
+            // Hide all content
+            document.querySelectorAll('.database-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.database-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected content and activate tab
+            document.getElementById(tabName + '-content').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function refreshDatabaseMetrics() {
+            try {
+                showMessage('Refreshing database metrics...', 'info');
+                
+                // Fetch payment processor metrics
+                const paymentMetrics = await fetch('http://localhost:3001/metrics');
+                if (paymentMetrics.ok) {
+                    const paymentData = await paymentMetrics.text();
+                    updatePaymentDatabaseMetrics(paymentData);
+                }
+
+                // Fetch reconciliation service metrics
+                const reconciliationMetrics = await fetch('http://localhost:3002/metrics');
+                if (reconciliationMetrics.ok) {
+                    const reconciliationData = await reconciliationMetrics.text();
+                    updateReconciliationDatabaseMetrics(reconciliationData);
+                }
+
+                // Update database status
+                updateDatabaseStatus(true);
+                addActivityLog('Database metrics refreshed successfully', 'success');
+                
+            } catch (error) {
+                updateDatabaseStatus(false);
+                addActivityLog('Failed to refresh database metrics: ' + error.message, 'danger');
+                showMessage('Error refreshing database metrics: ' + error.message, 'error');
+            }
+        }
+
+        function updatePaymentDatabaseMetrics(metricsData) {
+            const lines = metricsData.split('\n');
+            
+            lines.forEach(line => {
+                if (line.startsWith('transactions_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('payment-total-transactions').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('transactions_created_total')) {
+                    // This represents recent activity
+                    const value = line.split(' ')[1];
+                    addActivityLog(`New transaction created (Total: ${value})`, 'info');
+                } else if (line.startsWith('transactions_committed_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('payment-committed-transactions').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('transactions_failed_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('payment-failed-transactions').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('outbox_events_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('payment-outbox-events').querySelector('.database-metric-value').textContent = value;
+                }
+            });
+
+            // Simulate pending transactions (in real implementation, this would come from API)
+            const total = parseInt(document.getElementById('payment-total-transactions').querySelector('.database-metric-value').textContent) || 0;
+            const committed = parseInt(document.getElementById('payment-committed-transactions').querySelector('.database-metric-value').textContent) || 0;
+            const failed = parseInt(document.getElementById('payment-failed-transactions').querySelector('.database-metric-value').textContent) || 0;
+            const pending = Math.max(0, total - committed - failed);
+            
+            document.getElementById('payment-pending-transactions').querySelector('.database-metric-value').textContent = pending;
+        }
+
+        function updateReconciliationDatabaseMetrics(metricsData) {
+            const lines = metricsData.split('\n');
+            
+            lines.forEach(line => {
+                if (line.startsWith('events_processed_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('reconciliation-events-processed').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('anomalies_detected_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('reconciliation-anomalies').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('daily_summaries_updated_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('reconciliation-summaries').querySelector('.database-metric-value').textContent = value;
+                } else if (line.startsWith('reconciliation_runs_total')) {
+                    const value = line.split(' ')[1];
+                    document.getElementById('reconciliation-runs').querySelector('.database-metric-value').textContent = value;
+                }
+            });
+
+            // Update last run time
+            const now = new Date();
+            document.getElementById('reconciliation-last-run').querySelector('.database-metric-value').textContent = now.toLocaleTimeString();
+        }
+
+        function updateDatabaseStatus(isOnline) {
+            const statusElement = document.getElementById('db-monitoring-status');
+            if (isOnline) {
+                statusElement.className = 'status-indicator status-online';
+                statusElement.querySelector('span:last-child').textContent = 'Online';
+            } else {
+                statusElement.className = 'status-indicator status-offline';
+                statusElement.querySelector('span:last-child').textContent = 'Offline';
+            }
+        }
+
+        function toggleDatabaseMonitoring() {
+            if (isDatabaseMonitoringActive) {
+                clearInterval(databaseMonitoringInterval);
+                isDatabaseMonitoringActive = false;
+                showMessage('Database monitoring stopped', 'warning');
+                addActivityLog('Auto-refresh monitoring stopped', 'warning');
+            } else {
+                databaseMonitoringInterval = setInterval(refreshDatabaseMetrics, 5000); // Refresh every 5 seconds
+                isDatabaseMonitoringActive = true;
+                showMessage('Database monitoring started (5s intervals)', 'success');
+                addActivityLog('Auto-refresh monitoring started', 'success');
+                refreshDatabaseMetrics(); // Initial refresh
+            }
+        }
+
+        function addActivityLog(description, status) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            
+            const activityItem = {
+                time: timeString,
+                description: description,
+                status: status
+            };
+            
+            activityLog.unshift(activityItem); // Add to beginning
+            
+            // Keep only last 50 items
+            if (activityLog.length > 50) {
+                activityLog = activityLog.slice(0, 50);
+            }
+            
+            updateActivityLogDisplay();
+        }
+
+        function updateActivityLogDisplay() {
+            const logContainer = document.getElementById('database-activity-log');
+            logContainer.innerHTML = '';
+            
+            activityLog.forEach(item => {
+                const activityDiv = document.createElement('div');
+                activityDiv.className = 'activity-item';
+                activityDiv.innerHTML = `
+                    <span class="activity-time">${item.time}</span>
+                    <span class="activity-description">${item.description}</span>
+                    <span class="activity-status status-${item.status}">${item.status}</span>
+                `;
+                logContainer.appendChild(activityDiv);
+            });
+        }
+
+        function clearActivityLog() {
+            activityLog = [];
+            updateActivityLogDisplay();
+            addActivityLog('Activity log cleared', 'info');
+        }
+
+        async function generateTestData() {
+            try {
+                showMessage('Generating test data...', 'info');
+                addActivityLog('Starting test data generation', 'info');
+                
+                // Generate 5 test transactions
+                for (let i = 0; i < 5; i++) {
+                    const testTransaction = {
+                        external_id: `test-${Date.now()}-${i}`,
+                        amount: Math.floor(Math.random() * 10000) + 100, // Random amount between 100-10100 cents
+                        currency: 'USD',
+                        from_account: `account-${String(Math.floor(Math.random() * 10) + 1).padStart(3, '0')}`,
+                        to_account: `account-${String(Math.floor(Math.random() * 10) + 1).padStart(3, '0')}`,
+                        description: `Test transaction ${i + 1}`,
+                        metadata: {
+                            test_run: true,
+                            generated_at: new Date().toISOString()
+                        }
+                    };
+
+                    const response = await fetch('http://localhost:3001/transactions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(testTransaction)
+                    });
+
+                    if (response.ok) {
+                        addActivityLog(`Test transaction ${i + 1} created: ${testTransaction.external_id}`, 'success');
+                    } else {
+                        addActivityLog(`Failed to create test transaction ${i + 1}`, 'danger');
+                    }
+                    
+                    // Small delay between transactions
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                showMessage('Test data generation completed!', 'success');
+                addActivityLog('Test data generation completed', 'success');
+                
+                // Refresh metrics after generating test data
+                setTimeout(refreshDatabaseMetrics, 1000);
+                
+            } catch (error) {
+                showMessage('Error generating test data: ' + error.message, 'error');
+                addActivityLog('Error generating test data: ' + error.message, 'danger');
+            }
+        }
+
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             loadInitialData();
             connectWebSocket();
+            
+            // Initialize database monitoring
+            refreshDatabaseMetrics();
+            addActivityLog('Dashboard initialized - Database monitoring ready', 'info');
             
             // Update reconciliation service status
             fetch('http://localhost:3002/health')
