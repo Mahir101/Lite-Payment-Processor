@@ -143,3 +143,7 @@ data/
 uploads/
 downloads/
 cache/
+build/
+target/
+.target/
+*.ps1
