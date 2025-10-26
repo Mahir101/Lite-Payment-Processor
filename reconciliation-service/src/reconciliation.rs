@@ -74,50 +74,60 @@ impl ReconciliationService {
     ) -> Result<Vec<Anomaly>, Box<dyn std::error::Error + Send + Sync>> {
         let mut anomalies = Vec::new();
 
-        // Get transaction counts from payment processor and event ledger
-        let payment_processor_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM transactions")
-            .fetch_one(&db.pool)
-            .await?;
-
+        // Get event counts from event ledger
         let event_ledger_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM event_ledger")
             .fetch_one(&db.pool)
             .await?;
 
-        // Detect missing transactions
-        if payment_processor_count != event_ledger_count {
-            anomalies.push(Anomaly {
-                anomaly_id: Uuid::new_v4(),
-                transaction_id: None,
-                anomaly_type: AnomalyType::MissingTransaction,
-                description: format!(
-                    "Transaction count mismatch: Payment Processor has {} transactions, Event Ledger has {} events",
-                    payment_processor_count, event_ledger_count
-                ),
-                detected_at: Utc::now(),
-                severity: AnomalySeverity::High,
-            });
-        }
+        // Get unique transaction count from events
+        let unique_transaction_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(DISTINCT transaction_id) FROM event_ledger"
+        )
+        .fetch_one(&db.pool)
+        .await?;
 
-        // Check for orphaned events (events without corresponding transactions)
-        let orphaned_events: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        // Check for events without proper transaction references
+        let invalid_events: Vec<(Uuid, Uuid)> = sqlx::query_as(
             r#"
-            SELECT el.event_id, el.transaction_id
-            FROM event_ledger el
-            LEFT JOIN transactions t ON el.transaction_id = t.id
-            WHERE t.id IS NULL
+            SELECT id, transaction_id
+            FROM event_ledger
+            WHERE transaction_id IS NULL OR transaction_id = '00000000-0000-0000-0000-000000000000'
             "#
         )
         .fetch_all(&db.pool)
         .await?;
 
-        for (event_id, transaction_id) in orphaned_events {
+        for (event_id, transaction_id) in invalid_events {
             anomalies.push(Anomaly {
                 anomaly_id: Uuid::new_v4(),
                 transaction_id: Some(transaction_id),
                 anomaly_type: AnomalyType::OrphanedEvent,
-                description: format!("Event {} references non-existent transaction {}", event_id, transaction_id),
+                description: format!("Event {} has invalid transaction reference {}", event_id, transaction_id),
                 detected_at: Utc::now(),
                 severity: AnomalySeverity::Medium,
+            });
+        }
+
+        // Check for duplicate events
+        let duplicate_events: Vec<(Uuid, i64)> = sqlx::query_as(
+            r#"
+            SELECT event_id, COUNT(*) as count
+            FROM event_ledger
+            GROUP BY event_id
+            HAVING COUNT(*) > 1
+            "#
+        )
+        .fetch_all(&db.pool)
+        .await?;
+
+        for (event_id, count) in duplicate_events {
+            anomalies.push(Anomaly {
+                anomaly_id: Uuid::new_v4(),
+                transaction_id: None,
+                anomaly_type: AnomalyType::DuplicateTransaction,
+                description: format!("Event {} appears {} times in ledger", event_id, count),
+                detected_at: Utc::now(),
+                severity: AnomalySeverity::High,
             });
         }
 

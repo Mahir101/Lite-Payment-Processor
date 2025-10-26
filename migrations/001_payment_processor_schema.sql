@@ -36,7 +36,7 @@ CREATE INDEX idx_transactions_state_created_at ON transactions(state, created_at
 CREATE TABLE transaction_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    event_type VARCHAR(50) NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
     event_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -75,8 +75,8 @@ CREATE TRIGGER update_transactions_updated_at
 CREATE TABLE outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_id UUID NOT NULL,
-    aggregate_type VARCHAR(50) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
+    aggregate_type VARCHAR(255) NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
     event_data JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     processed_at TIMESTAMPTZ,

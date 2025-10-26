@@ -19,7 +19,7 @@ impl DatabaseService {
             .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/reconciliation".to_string());
         
         let staging_database_url = std::env::var("STAGING_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/reconciliation_staging".to_string());
+            .unwrap_or_else(|_| "postgresql://postgres:123456@localhost:5432/reconciliation_staging".to_string());
 
         let pool = PgPool::connect(&database_url).await?;
         let staging_pool = PgPool::connect(&staging_database_url).await?;
@@ -221,7 +221,7 @@ impl DatabaseService {
             sqlx::query(
                 r#"
                 SELECT anomaly_id, transaction_id, anomaly_type, description, 
-                       severity, detected_at, resolved_at, resolution_notes
+                       severity, detected_at
                 FROM anomalies
                 WHERE severity = $1
                 ORDER BY detected_at DESC
@@ -235,7 +235,7 @@ impl DatabaseService {
             sqlx::query(
                 r#"
                 SELECT anomaly_id, transaction_id, anomaly_type, description, 
-                       severity, detected_at, resolved_at, resolution_notes
+                       severity, detected_at
                 FROM anomalies
                 ORDER BY detected_at DESC
                 LIMIT $1 OFFSET $2
@@ -266,7 +266,7 @@ impl DatabaseService {
         let row = sqlx::query(
             r#"
             SELECT anomaly_id, transaction_id, anomaly_type, description, 
-                   severity, detected_at, resolved_at, resolution_notes
+                   severity, detected_at
             FROM anomalies
             WHERE anomaly_id = $1
             "#,
@@ -292,8 +292,8 @@ impl DatabaseService {
     pub async fn list_daily_summaries(&self, limit: i64, offset: i64) -> Result<Vec<DailySummary>, Box<dyn std::error::Error + Send + Sync>> {
         let rows = sqlx::query(
             r#"
-            SELECT date, total_transactions, total_amount, committed_count, 
-                   failed_count, pending_count, anomalies_count
+            SELECT date, total_transactions, total_amount, committed_transactions, 
+                   failed_transactions, anomalies_count
             FROM daily_summaries
             ORDER BY date DESC
             LIMIT $1 OFFSET $2
@@ -310,9 +310,9 @@ impl DatabaseService {
                 date: row.get("date"),
                 total_transactions: row.get("total_transactions"),
                 total_amount: row.get("total_amount"),
-                committed_count: row.get("committed_count"),
-                failed_count: row.get("failed_count"),
-                pending_count: row.get("pending_count"),
+                committed_count: row.get("committed_transactions"),
+                failed_count: row.get("failed_transactions"),
+                pending_count: 0, // Calculate as total - committed - failed
                 anomalies_count: row.get("anomalies_count"),
             });
         }

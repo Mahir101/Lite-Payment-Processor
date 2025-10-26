@@ -5,7 +5,7 @@
 CREATE TABLE event_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id VARCHAR(255) NOT NULL UNIQUE,
-    event_type VARCHAR(50) NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
     transaction_id UUID NOT NULL,
     event_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -40,25 +40,21 @@ CREATE INDEX idx_daily_summaries_date ON daily_summaries(date);
 -- Anomalies table - stores detected discrepancies
 CREATE TABLE anomalies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    anomaly_type VARCHAR(50) NOT NULL,
-    description TEXT NOT NULL,
+    anomaly_id UUID NOT NULL UNIQUE,
     transaction_id UUID,
-    expected_value JSONB,
-    actual_value JSONB,
-    severity VARCHAR(20) NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
-    status VARCHAR(20) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'INVESTIGATING', 'RESOLVED', 'IGNORED')),
+    anomaly_type VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
     detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    resolved_at TIMESTAMPTZ,
-    resolved_by VARCHAR(255),
-    resolution_notes TEXT
+    severity VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Indexes for anomaly queries
 CREATE INDEX idx_anomalies_type ON anomalies(anomaly_type);
 CREATE INDEX idx_anomalies_severity ON anomalies(severity);
-CREATE INDEX idx_anomalies_status ON anomalies(status);
 CREATE INDEX idx_anomalies_detected_at ON anomalies(detected_at);
 CREATE INDEX idx_anomalies_transaction_id ON anomalies(transaction_id);
+CREATE INDEX idx_anomalies_anomaly_id ON anomalies(anomaly_id);
 
 -- Reconciliation runs table - tracks reconciliation execution
 CREATE TABLE reconciliation_runs (
@@ -91,6 +87,25 @@ CREATE TRIGGER update_daily_summaries_updated_at
     BEFORE UPDATE ON daily_summaries 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Reconciliation reports table
+CREATE TABLE reconciliation_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id UUID NOT NULL UNIQUE,
+    generated_at TIMESTAMPTZ NOT NULL,
+    period_start TIMESTAMPTZ NOT NULL,
+    period_end TIMESTAMPTZ NOT NULL,
+    total_transactions BIGINT NOT NULL DEFAULT 0,
+    total_amount BIGINT NOT NULL DEFAULT 0,
+    anomalies_count BIGINT NOT NULL DEFAULT 0,
+    report_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for reconciliation reports
+CREATE INDEX idx_reconciliation_reports_report_id ON reconciliation_reports(report_id);
+CREATE INDEX idx_reconciliation_reports_generated_at ON reconciliation_reports(generated_at);
 
 -- Event Replay tracking table
 CREATE TABLE event_replays (
