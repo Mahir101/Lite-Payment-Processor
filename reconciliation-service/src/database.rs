@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use shared::{
     Anomaly, AnomalySeverity, AnomalyType, ReconciliationReport, TransactionEvent,
-    TransactionEventType,
+    TransactionState,
 };
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -42,6 +42,8 @@ impl DatabaseService {
     }
 
     pub async fn store_event(&self, event: &TransactionEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        
         sqlx::query(
             r#"
             INSERT INTO event_ledger (event_id, transaction_id, event_type, event_data, processed_at, created_at)
@@ -58,26 +60,60 @@ impl DatabaseService {
         .execute(&self.pool)
         .await?;
 
+        // Record metrics
+        let duration = start.elapsed().as_secs_f64();
+        crate::metrics::increment_event_processed(&format!("{:?}", event.event_type));
+        crate::metrics::record_event_processing_duration(&format!("{:?}", event.event_type), duration);
+        crate::metrics::record_database_duration("store_event", duration);
+
         Ok(())
     }
 
     pub async fn update_daily_summary(&self, event: &TransactionEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let today = Utc::now().date_naive();
+        let start = std::time::Instant::now();
+        let today = event.timestamp.date_naive();
         
-        // This is a simplified version - in reality, you'd want to aggregate properly
+        // Extract amount from event data
+        let amount = event.data.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
+        
+        // Determine transaction state based on event type
+        let (committed_count, failed_count, pending_count) = match &event.event_type {
+            shared::TransactionEventType::Created => (0, 0, 1),
+            shared::TransactionEventType::StateChanged { to, .. } => match to {
+                shared::TransactionState::Committed => (1, 0, 0),
+                shared::TransactionState::Failed => (0, 1, 0),
+                shared::TransactionState::Cancelled => (0, 1, 0),
+                _ => (0, 0, 1),
+            },
+            shared::TransactionEventType::Failed { .. } => (0, 1, 0),
+            shared::TransactionEventType::Completed => (1, 0, 0),
+        };
+        
         sqlx::query(
             r#"
             INSERT INTO daily_summaries (date, total_transactions, total_amount, committed_count, failed_count, pending_count)
-            VALUES ($1, 1, 0, 0, 0, 1)
+            VALUES ($1, 1, $2, $3, $4, $5)
             ON CONFLICT (date) DO UPDATE SET
                 total_transactions = daily_summaries.total_transactions + 1,
-                pending_count = daily_summaries.pending_count + 1,
+                total_amount = daily_summaries.total_amount + $2,
+                committed_count = daily_summaries.committed_count + $3,
+                failed_count = daily_summaries.failed_count + $4,
+                pending_count = daily_summaries.pending_count + $5,
                 updated_at = NOW()
             "#,
         )
         .bind(today)
+        .bind(amount)
+        .bind(committed_count)
+        .bind(failed_count)
+        .bind(pending_count)
         .execute(&self.pool)
         .await?;
+
+        // Record metrics
+        let duration = start.elapsed().as_secs_f64();
+        crate::metrics::increment_daily_summary_updated();
+        crate::metrics::record_database_duration("update_daily_summary", duration);
 
         Ok(())
     }
@@ -162,7 +198,7 @@ impl DatabaseService {
             let transaction_id: Uuid = row.get("transaction_id");
             let event_type: String = row.get("event_type");
             let processed_at: DateTime<Utc> = row.get("processed_at");
-            let event_data: serde_json::Value = row.get("event_data");
+            let _event_data: serde_json::Value = row.get("event_data");
 
             csv_data.push_str(&format!(
                 "{},{},{},,\n",

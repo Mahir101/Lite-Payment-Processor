@@ -28,21 +28,18 @@ use axum::{
     Router,
 };
 use chrono::{DateTime, Utc};
-use redis::AsyncCommands;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use shared::{
-    Anomaly, AnomalySeverity, AnomalyType, ApiResponse, HealthCheck, HealthStatus,
-    ReconciliationReport, TransactionEvent, TransactionEventType,
+    Anomaly, ApiResponse, HealthCheck, HealthStatus,
+    ReconciliationReport, TransactionEvent,
 };
-use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, TraceLayer},
 };
-use tokio_stream::StreamExt;
-use tracing::{info, warn, error};
+use tracing::{info, error};
 use uuid::Uuid;
 
 mod database;
@@ -498,12 +495,22 @@ async fn list_daily_summaries(
 async fn trigger_reconciliation(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
+    let start = std::time::Instant::now();
+    
     match state.reconciliation.run_reconciliation(&state.db).await {
         Ok(result) => {
+            // Record reconciliation metrics
+            let duration = start.elapsed().as_secs_f64();
+            metrics::increment_reconciliation_run();
+            metrics::record_reconciliation_duration(duration);
+            
             info!("Reconciliation completed: {}", result);
             Ok(Json(ApiResponse::success(result)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("reconciliation", "reconciliation_service");
+            
             error!("Failed to run reconciliation: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -543,10 +550,16 @@ async fn start_event_replay(
 ) -> Result<Json<ApiResponse<uuid::Uuid>>, (StatusCode, Json<ApiResponse<()>>)> {
     match state.event_replay.start_full_replay().await {
         Ok(replay_id) => {
+            // Record event replay metrics
+            metrics::increment_event_replay();
+            
             info!("Started event replay: {}", replay_id);
             Ok(Json(ApiResponse::success(replay_id)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("event_replay", "reconciliation_service");
+            
             error!("Failed to start event replay: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -601,10 +614,16 @@ async fn start_safe_event_replay(
 ) -> Result<Json<ApiResponse<uuid::Uuid>>, (StatusCode, Json<ApiResponse<()>>)> {
     match state.safe_event_replay.start_safe_replay().await {
         Ok(replay_id) => {
+            // Record event replay metrics
+            metrics::increment_event_replay();
+            
             info!("Started safe event replay: {}", replay_id);
             Ok(Json(ApiResponse::success(replay_id)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("safe_event_replay", "reconciliation_service");
+            
             error!("Failed to start safe event replay: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

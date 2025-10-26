@@ -127,7 +127,6 @@ pub fn init_metrics() {
 }
 
 pub fn get_metrics() -> String {
-    use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
     let metric_families = REGISTRY.gather();
     encoder.encode_to_string(&metric_families).unwrap()

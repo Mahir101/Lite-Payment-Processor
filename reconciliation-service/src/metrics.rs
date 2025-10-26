@@ -1,6 +1,6 @@
 use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, IntGaugeVec, Opts, Registry,
+    Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
+    IntGauge, Opts, Registry,
 };
 
 lazy_static::lazy_static! {
@@ -167,7 +167,6 @@ pub fn init_metrics() {
 }
 
 pub fn get_metrics() -> String {
-    use prometheus::Encoder;
     let encoder = prometheus::TextEncoder::new();
     let metric_families = REGISTRY.gather();
     encoder.encode_to_string(&metric_families).unwrap()

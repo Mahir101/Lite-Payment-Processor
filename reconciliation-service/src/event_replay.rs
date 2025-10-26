@@ -1,11 +1,11 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use shared::{
-    Anomaly, AnomalySeverity, AnomalyType, ReconciliationReport, TransactionEvent,
+    TransactionEvent,
     TransactionEventType,
 };
 use sqlx::{PgPool, Row};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 use uuid::Uuid;
 
 #[derive(Clone)]

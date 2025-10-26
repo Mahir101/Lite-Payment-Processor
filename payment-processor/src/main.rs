@@ -38,6 +38,7 @@ mod auth;
 mod card_validation;
 mod database;
 mod metrics;
+mod metrics_middleware;
 mod outbox;
 mod redis_client;
 mod state_machine;
@@ -143,7 +144,13 @@ async fn main() -> Result<()> {
     // Start outbox processor background task
     // This ensures reliable event publishing using the outbox pattern
     let outbox_service = outbox::OutboxService::new(app_state.db.pool.clone());
-    let outbox_processor = outbox::OutboxProcessor::new(outbox_service, app_state.redis.clone());
+    let outbox_processor = outbox::OutboxProcessor::new(outbox_service.clone(), app_state.redis.clone());
+    
+    // Reset failed events for retry (max 3 retries)
+    if let Err(e) = outbox_service.reset_failed_events(3).await {
+        warn!("Failed to reset failed events: {}", e);
+    }
+    
     tokio::spawn(async move {
         if let Err(e) = outbox_processor.start_processor().await {
             error!("Outbox processor failed: {}", e);
@@ -185,7 +192,8 @@ async fn main() -> Result<()> {
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
-                .layer(CorsLayer::permissive()),
+                .layer(CorsLayer::permissive())
+                .layer(axum::middleware::from_fn(metrics_middleware::metrics_middleware)),
         );
 
     // Start HTTP server on port 3001
@@ -350,6 +358,11 @@ async fn create_transaction(
                 warn!("Failed to emit event: {}", e);
             }
 
+            // Record transaction metrics
+            metrics::increment_transaction_created(&transaction.currency);
+            metrics::add_transaction_amount(transaction.amount);
+            metrics::increment_outbox_event();
+
             // Broadcast real-time update to WebSocket clients
             // This enables live dashboard updates for transaction monitoring
             state.ws_manager.broadcast_transaction_created(&transaction).await;
@@ -358,6 +371,9 @@ async fn create_transaction(
             Ok(Json(ApiResponse::success(transaction)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("transaction_creation", "payment_processor");
+            
             error!("Failed to create transaction: {}", e);
             Err((
                 StatusCode::BAD_REQUEST,
@@ -447,10 +463,16 @@ async fn commit_transaction(
 ) -> Result<Json<ApiResponse<Transaction>>, (StatusCode, Json<ApiResponse<()>>)> {
     match state.state_machine.transition_to_committed(&state.db, id).await {
         Ok(transaction) => {
+            // Record transaction metrics
+            metrics::increment_transaction_committed();
+            
             info!("Transaction committed: {}", id);
             Ok(Json(ApiResponse::success(transaction)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("transaction_commit", "payment_processor");
+            
             error!("Failed to commit transaction: {}", e);
             Err((
                 StatusCode::BAD_REQUEST,
@@ -497,10 +519,16 @@ async fn fail_transaction(
 ) -> Result<Json<ApiResponse<Transaction>>, (StatusCode, Json<ApiResponse<()>>)> {
     match state.state_machine.transition_to_failed(&state.db, id, "Manual failure".to_string()).await {
         Ok(transaction) => {
+            // Record transaction metrics
+            metrics::increment_transaction_failed();
+            
             info!("Transaction failed: {}", id);
             Ok(Json(ApiResponse::success(transaction)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("transaction_fail", "payment_processor");
+            
             error!("Failed to fail transaction: {}", e);
             Err((
                 StatusCode::BAD_REQUEST,
@@ -516,10 +544,16 @@ async fn cancel_transaction(
 ) -> Result<Json<ApiResponse<Transaction>>, (StatusCode, Json<ApiResponse<()>>)> {
     match state.state_machine.transition_to_cancelled(&state.db, id).await {
         Ok(transaction) => {
+            // Record transaction metrics
+            metrics::increment_transaction_cancelled();
+            
             info!("Transaction cancelled: {}", id);
             Ok(Json(ApiResponse::success(transaction)))
         }
         Err(e) => {
+            // Record error metrics
+            metrics::increment_error("transaction_cancel", "payment_processor");
+            
             error!("Failed to cancel transaction: {}", e);
             Err((
                 StatusCode::BAD_REQUEST,
@@ -832,6 +866,14 @@ async fn process_visa_payment(
         ));
     }
 
+    // Additional Visa-specific validation
+    if let Err(e) = state.visa_client.validate_card(&payload.card_info).await {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error(format!("Visa card validation failed: {}", e))),
+        ));
+    }
+
     // Check for fraud
     if let Err(e) = state.fraud_detector.check_fraud(&payload.card_info, &None) {
         return Err((
@@ -845,6 +887,9 @@ async fn process_visa_payment(
         Ok(visa_response) => {
             info!("Visa payment successful: {}", visa_response.transaction_id);
             
+            // Get additional card type information
+            let card_type_info = state.visa_client.get_card_type_info(&payload.card_info.pan).await.unwrap_or_default();
+            
             let response = serde_json::json!({
                 "success": true,
                 "visa_transaction_id": visa_response.transaction_id,
@@ -856,7 +901,8 @@ async fn process_visa_payment(
                 "currency": visa_response.currency,
                 "timestamp": visa_response.timestamp,
                 "card_type": CardValidator::get_card_type(&payload.card_info.pan),
-                "masked_card": CardValidator::mask_card_number(&payload.card_info.pan)
+                "masked_card": CardValidator::mask_card_number(&payload.card_info.pan),
+                "card_type_info": card_type_info,
             });
             
             Ok(Json(ApiResponse::success(response)))
