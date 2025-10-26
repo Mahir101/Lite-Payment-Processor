@@ -24,6 +24,332 @@ This project demonstrates microservices architecture, message-driven design, and
                                                      └─────────────────────┘
 ```
 
+## System Flow Diagrams
+
+### 1. High-Level System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        API[API Clients]
+        Dashboard[Live Dashboard]
+        LoadTest[Load Tests]
+    end
+    
+    subgraph "Service Layer"
+        PP[Payment Processor<br/>Port: 3001]
+        RS[Reconciliation Service<br/>Port: 3002]
+    end
+    
+    subgraph "Data Layer"
+        Redis[(Redis<br/>Pub/Sub & Cache)]
+        PDB[(Payment DB<br/>PostgreSQL)]
+        RDB[(Reconciliation DB<br/>PostgreSQL)]
+        SDB[(Staging DB<br/>PostgreSQL)]
+    end
+    
+    subgraph "Monitoring"
+        Prometheus[Prometheus]
+        Grafana[Grafana]
+        Metrics[Metrics Endpoints]
+    end
+    
+    API --> PP
+    Dashboard --> PP
+    Dashboard --> RS
+    LoadTest --> PP
+    LoadTest --> RS
+    
+    PP --> Redis
+    PP --> PDB
+    RS --> Redis
+    RS --> RDB
+    RS --> SDB
+    
+    PP --> Metrics
+    RS --> Metrics
+    Metrics --> Prometheus
+    Prometheus --> Grafana
+```
+
+### 2. Transaction Processing Flow
+
+```mermaid
+flowchart TD
+    Start([Client Request]) --> Validate{Validate Request}
+    Validate -->|Invalid| Error1[Return Error]
+    Validate -->|Valid| CheckIdempotency{Check Idempotency}
+    
+    CheckIdempotency -->|Duplicate| Error2[Return Duplicate Error]
+    CheckIdempotency -->|New| CreateTransaction[Create Transaction]
+    
+    CreateTransaction --> StoreDB[(Store in Database)]
+    StoreDB --> EmitEvent[Emit Created Event]
+    EmitEvent --> Outbox[Store in Outbox]
+    Outbox --> SetLock[Set Idempotency Lock]
+    SetLock --> Broadcast[Broadcast to WebSocket]
+    Broadcast --> Success[Return Success]
+    
+    CreateTransaction -->|Error| Error3[Return Database Error]
+    
+    style Start fill:#e1f5fe
+    style Success fill:#c8e6c9
+    style Error1 fill:#ffcdd2
+    style Error2 fill:#ffcdd2
+    style Error3 fill:#ffcdd2
+```
+
+### 3. Event-Driven Reconciliation Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant PP as Payment Processor
+    participant Redis
+    participant RS as Reconciliation Service
+    participant PDB as Payment DB
+    participant RDB as Reconciliation DB
+    
+    Client->>PP: POST /transactions
+    PP->>PDB: Store Transaction
+    PP->>Redis: Publish Event
+    PP->>Client: Return Transaction ID
+    
+    Note over Redis: Event Processing
+    Redis->>RS: Consume Event
+    RS->>RDB: Store in Event Ledger
+    RS->>RDB: Update Daily Summary
+    
+    Note over RS: Periodic Reconciliation
+    RS->>PDB: Query Transaction Count
+    RS->>RDB: Query Event Count
+    RS->>RS: Compare & Detect Anomalies
+    RS->>RDB: Store Anomalies (if any)
+```
+
+### 4. Safe Event Replay Process
+
+```mermaid
+flowchart TD
+    Start([Start Safe Replay]) --> CreateBackup[Create Production Backup]
+    CreateBackup --> ClearStaging[Clear Staging Database]
+    ClearStaging --> GetEvents[Get All Events from Source]
+    GetEvents --> ProcessEvents[Process Events to Staging]
+    
+    ProcessEvents --> ValidateData{Validate Staging Data}
+    ValidateData -->|Invalid| Rollback[Rollback & Mark Failed]
+    ValidateData -->|Valid| AtomicSwap[Atomic Table Swap]
+    
+    AtomicSwap --> UpdateProduction[Update Production Tables]
+    UpdateProduction --> Cleanup[Cleanup Old Tables]
+    Cleanup --> Complete[Mark Replay Complete]
+    
+    Rollback --> Error[Return Error]
+    
+    style Start fill:#e1f5fe
+    style Complete fill:#c8e6c9
+    style Rollback fill:#ffcdd2
+    style Error fill:#ffcdd2
+```
+
+### 5. State Machine Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: Create Transaction
+    
+    PENDING --> COMMITTED: Commit Transaction
+    PENDING --> FAILED: Fail Transaction
+    PENDING --> CANCELLED: Cancel Transaction
+    
+    COMMITTED --> [*]: Transaction Complete
+    FAILED --> [*]: Transaction Complete
+    CANCELLED --> [*]: Transaction Complete
+    
+    note right of PENDING: Initial state after creation
+    note right of COMMITTED: Successfully processed
+    note right of FAILED: Processing failed
+    note right of CANCELLED: Manually cancelled
+```
+
+### 6. Database Schema Relationships
+
+```mermaid
+erDiagram
+    TRANSACTIONS {
+        uuid id PK
+        string external_id UK
+        int64 amount
+        string currency
+        string state
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    OUTBOX_EVENTS {
+        uuid id PK
+        uuid transaction_id FK
+        string event_type
+        jsonb event_data
+        string status
+        int32 retry_count
+        timestamp created_at
+    }
+    
+    EVENT_LEDGER {
+        uuid event_id PK
+        uuid transaction_id FK
+        string event_type
+        jsonb event_data
+        timestamp processed_at
+        timestamp created_at
+    }
+    
+    DAILY_SUMMARIES {
+        date date PK
+        int64 total_transactions
+        int64 total_amount
+        int64 committed_count
+        int64 failed_count
+        int64 pending_count
+        timestamp updated_at
+    }
+    
+    RECONCILIATION_REPORTS {
+        uuid report_id PK
+        timestamp generated_at
+        timestamp period_start
+        timestamp period_end
+        int64 total_transactions
+        int64 total_amount
+        int64 anomalies_count
+        jsonb report_data
+    }
+    
+    ANOMALIES {
+        uuid anomaly_id PK
+        uuid transaction_id FK
+        string anomaly_type
+        string description
+        timestamp detected_at
+        string severity
+    }
+    
+    TRANSACTIONS ||--o{ OUTBOX_EVENTS : "generates"
+    TRANSACTIONS ||--o{ EVENT_LEDGER : "tracked_in"
+    EVENT_LEDGER ||--o{ DAILY_SUMMARIES : "aggregated_to"
+    ANOMALIES ||--o{ RECONCILIATION_REPORTS : "included_in"
+```
+
+### 7. Monitoring & Observability Stack
+
+```mermaid
+graph TB
+    subgraph "Application Layer"
+        PP[Payment Processor]
+        RS[Reconciliation Service]
+    end
+    
+    subgraph "Metrics Collection"
+        PP --> PP_Metrics[/metrics endpoint]
+        RS --> RS_Metrics[/metrics endpoint]
+    end
+    
+    subgraph "Monitoring Stack"
+        PP_Metrics --> Prometheus[Prometheus<br/>Metrics Storage]
+        RS_Metrics --> Prometheus
+        Prometheus --> Grafana[Grafana<br/>Visualization]
+    end
+    
+    subgraph "Health Monitoring"
+        PP --> PP_Health[/health endpoint]
+        RS --> RS_Health[/health endpoint]
+    end
+    
+    subgraph "Logging"
+        PP --> PP_Logs[Structured Logs]
+        RS --> RS_Logs[Structured Logs]
+    end
+    
+    style Prometheus fill:#e3f2fd
+    style Grafana fill:#f3e5f5
+```
+
+### 8. Load Testing Flow
+
+```mermaid
+sequenceDiagram
+    participant K6 as k6 Load Test
+    participant PP as Payment Processor
+    participant Redis
+    participant RS as Reconciliation Service
+    
+    Note over K6: Load Test Execution
+    loop For 60 seconds
+        K6->>PP: POST /transactions (200 req/s)
+        PP->>Redis: Publish Events
+        PP->>K6: Response (p95 < 200ms)
+    end
+    
+    Note over RS: Event Processing
+    Redis->>RS: Consume Events
+    RS->>RS: Process & Store Events
+    
+    Note over K6: Reconciliation Test
+    K6->>RS: POST /reconcile
+    RS->>RS: Run Reconciliation
+    RS->>K6: Return Results
+```
+
+### 9. Error Handling & Resilience Patterns
+
+```mermaid
+flowchart TD
+    Request([Incoming Request]) --> Validate{Input Validation}
+    Validate -->|Invalid| ReturnError[Return 400 Bad Request]
+    Validate -->|Valid| ProcessRequest[Process Request]
+    
+    ProcessRequest --> TryOperation[Try Database Operation]
+    TryOperation -->|Success| Success[Return Success]
+    TryOperation -->|Timeout| Retry{Retry Count < Max?}
+    TryOperation -->|Connection Error| CircuitBreaker{Circuit Open?}
+    
+    Retry -->|Yes| Wait[Wait & Retry]
+    Retry -->|No| ReturnTimeout[Return Timeout Error]
+    Wait --> TryOperation
+    
+    CircuitBreaker -->|Open| ReturnCircuitOpen[Return Circuit Open Error]
+    CircuitBreaker -->|Closed| TryOperation
+    
+    style ReturnError fill:#ffcdd2
+    style ReturnTimeout fill:#ffcdd2
+    style ReturnCircuitOpen fill:#ffcdd2
+    style Success fill:#c8e6c9
+```
+
+### 10. Security & Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant PP as Payment Processor
+    participant Auth as Auth Service
+    participant DB as Database
+    
+    Client->>PP: Request with JWT Token
+    PP->>Auth: Validate JWT Token
+    Auth->>DB: Check Token Validity
+    DB->>Auth: Return Token Status
+    Auth->>PP: Token Valid/Invalid
+    
+    alt Token Valid
+        PP->>PP: Process Request
+        PP->>Client: Return Response
+    else Token Invalid
+        PP->>Client: Return 401 Unauthorized
+    end
+```
+
 ## Services
 
 ### Service A - Payment Processor
