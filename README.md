@@ -251,24 +251,24 @@ graph TB
     end
     
     subgraph "Metrics Collection"
-        PP --> PP_Metrics[/metrics endpoint]
-        RS --> RS_Metrics[/metrics endpoint]
+        PP --> PP_Metrics["metrics endpoint"]
+        RS --> RS_Metrics["metrics endpoint"]
     end
     
     subgraph "Monitoring Stack"
-        PP_Metrics --> Prometheus[Prometheus<br/>Metrics Storage]
+        PP_Metrics --> Prometheus["Prometheus<br/>Metrics Storage"]
         RS_Metrics --> Prometheus
-        Prometheus --> Grafana[Grafana<br/>Visualization]
+        Prometheus --> Grafana["Grafana<br/>Visualization"]
     end
     
     subgraph "Health Monitoring"
-        PP --> PP_Health[/health endpoint]
-        RS --> RS_Health[/health endpoint]
+        PP --> PP_Health["health endpoint"]
+        RS --> RS_Health["health endpoint"]
     end
     
     subgraph "Logging"
-        PP --> PP_Logs[Structured Logs]
-        RS --> RS_Logs[Structured Logs]
+        PP --> PP_Logs["Structured Logs"]
+        RS --> RS_Logs["Structured Logs"]
     end
     
     style Prometheus fill:#e3f2fd
