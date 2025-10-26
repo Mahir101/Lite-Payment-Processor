@@ -26,14 +26,9 @@ scrape_configs:
     scrape_interval: 5s
     scrape_timeout: 5s
 
-  - job_name: 'postgres-payment'
+  - job_name: 'postgres'
     static_configs:
-      - targets: ['payment-db:5432']
-    scrape_interval: 30s
-
-  - job_name: 'postgres-reconciliation'
-    static_configs:
-      - targets: ['reconciliation-db:5433']
+      - targets: ['postgres:5432']
     scrape_interval: 30s
 
   - job_name: 'redis'

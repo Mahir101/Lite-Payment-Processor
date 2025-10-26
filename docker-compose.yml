@@ -1,8 +1,26 @@
 version: '3.8'
 
+# Docker Compose Profiles Usage:
+# 
+# Development (minimal setup):
+#   docker-compose up -d
+#   This starts: postgres (with all databases) + redis
+#
+# Services (with applications):
+#   docker-compose --profile services up -d
+#   This starts: postgres + redis + payment-processor + reconciliation-service
+#
+# Full Stack (with monitoring):
+#   docker-compose --profile services --profile monitoring up -d
+#   This starts: everything + prometheus + grafana
+#
+# Monitoring Only:
+#   docker-compose --profile monitoring up -d
+#   This starts: prometheus + grafana
+
 services:
-  # PostgreSQL Database for Payment Processor
-  payment-db:
+  # Single PostgreSQL instance with multiple databases
+  postgres:
     image: postgres:15
     environment:
       POSTGRES_DB: payment_processor
@@ -12,66 +30,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - payment_db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./migrations/001_payment_processor_schema.sql:/docker-entrypoint-initdb.d/001_payment_processor_schema.sql
-      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/002_monitoring_queries.sql
+      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/002_reconciliation_schema.sql
+      - ./create-databases.sql:/docker-entrypoint-initdb.d/003_create_databases.sql
+      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/004_monitoring_queries.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_processor"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: >
-      postgres
-      -c shared_preload_libraries=pg_stat_statements
-      -c pg_stat_statements.track=all
-      -c log_statement=all
-      -c log_duration=on
-      -c log_min_duration_statement=1000
-      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
-
-  # PostgreSQL Database for Reconciliation Service
-  reconciliation-db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: reconciliation
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
-    ports:
-      - "5433:5432"
-    volumes:
-      - reconciliation_db_data:/var/lib/postgresql/data
-      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/001_reconciliation_schema.sql
-      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/002_monitoring_queries.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d reconciliation"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: >
-      postgres
-      -c shared_preload_libraries=pg_stat_statements
-      -c pg_stat_statements.track=all
-      -c log_statement=all
-      -c log_duration=on
-      -c log_min_duration_statement=1000
-      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
-
-  # PostgreSQL Database for Reconciliation Staging (Safe Replay)
-  reconciliation-staging-db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: reconciliation_staging
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
-    ports:
-      - "5434:5432"
-    volumes:
-      - reconciliation_staging_db_data:/var/lib/postgresql/data
-      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/001_reconciliation_schema.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d reconciliation_staging"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -105,12 +70,12 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:password@payment-db:5432/payment_processor
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/payment_processor
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-secret-key-change-in-production
       RUST_LOG: info
     depends_on:
-      payment-db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -119,6 +84,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - services
 
   # Reconciliation Service
   reconciliation-service:
@@ -128,15 +95,13 @@ services:
     ports:
       - "3002:3002"
     environment:
-      DATABASE_URL: postgresql://postgres:password@reconciliation-db:5432/reconciliation
-      STAGING_DATABASE_URL: postgresql://postgres:password@reconciliation-staging-db:5432/reconciliation_staging
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/reconciliation
+      STAGING_DATABASE_URL: postgresql://postgres:password@postgres:5432/reconciliation_staging
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-secret-key-change-in-production
       RUST_LOG: info
     depends_on:
-      reconciliation-db:
-        condition: service_healthy
-      reconciliation-staging-db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -145,25 +110,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # Database Monitoring Service (Optional)
-  db-monitor:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: monitoring
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5434:5432"
-    volumes:
-      - ./monitoring-queries.sql:/docker-entrypoint-initdb.d/001_monitoring_setup.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     profiles:
-      - monitoring
+      - services
+
 
   # Prometheus for metrics (optional)
   prometheus:
@@ -180,6 +129,8 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
 
   # Grafana for visualization (optional)
   grafana:
@@ -188,15 +139,16 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+    profiles:
+      - monitoring
 
 volumes:
-  payment_db_data:
-  reconciliation_db_data:
-  reconciliation_staging_db_data:
+  postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
