@@ -47,6 +47,7 @@ use uuid::Uuid;
 
 mod database;
 mod event_replay;
+mod safe_event_replay;
 mod metrics;
 mod reconciliation;
 mod redis_client;
@@ -55,6 +56,7 @@ use database::DatabaseService;
 use redis_client::RedisService;
 use reconciliation::ReconciliationService;
 use event_replay::EventReplayService;
+use safe_event_replay::SafeEventReplayService;
 
 /// Application state containing all service dependencies for reconciliation
 /// 
@@ -69,8 +71,10 @@ pub struct AppState {
     pub redis: RedisService,
     /// Reconciliation service for report generation and anomaly detection
     pub reconciliation: ReconciliationService,
-    /// Event replay service for reprocessing historical events
+    /// Event replay service for reprocessing historical events (legacy)
     pub event_replay: EventReplayService,
+    /// Safe event replay service for reprocessing historical events with staging database
+    pub safe_event_replay: SafeEventReplayService,
 }
 
 /// Main application entry point for the Reconciliation Service
@@ -121,6 +125,7 @@ async fn main() -> Result<()> {
     let redis = RedisService::new().await.map_err(|e| anyhow::anyhow!("{}", e))?;
     let reconciliation = ReconciliationService::new();
     let event_replay = EventReplayService::new(db.pool.clone());
+    let safe_event_replay = SafeEventReplayService::new(db.pool.clone(), db.staging_pool.clone());
 
     // Create application state with all services
     let app_state = AppState {
@@ -128,6 +133,7 @@ async fn main() -> Result<()> {
         redis,
         reconciliation,
         event_replay,
+        safe_event_replay,
     };
 
     // Start event consumer background task
@@ -163,6 +169,11 @@ async fn main() -> Result<()> {
         .route("/replay/start", post(start_event_replay))
         .route("/replay/:id", get(get_replay_status))
         .route("/replay", get(list_replays))
+        
+        // Safe event replay endpoints (new safer approach)
+        .route("/safe-replay/start", post(start_safe_event_replay))
+        .route("/safe-replay/:id", get(get_safe_replay_status))
+        .route("/safe-replay", get(list_safe_replays))
         
         // Add application state and middleware
         .with_state(app_state)
@@ -292,6 +303,25 @@ async fn health_check(State(state): State<AppState>) -> Json<ApiResponse<HealthC
                 last_check: Utc::now(),
             });
             error!("Database health check failed: {}", e);
+        }
+    }
+
+    // Check staging database
+    match state.db.staging_health_check().await {
+        Ok(_) => {
+            dependencies.insert("staging_database".to_string(), shared::DependencyHealth {
+                status: HealthStatus::Healthy,
+                response_time_ms: Some(8),
+                last_check: Utc::now(),
+            });
+        }
+        Err(e) => {
+            dependencies.insert("staging_database".to_string(), shared::DependencyHealth {
+                status: HealthStatus::Unhealthy,
+                response_time_ms: None,
+                last_check: Utc::now(),
+            });
+            error!("Staging database health check failed: {}", e);
         }
     }
 
@@ -557,6 +587,64 @@ async fn list_replays(
         Ok(replays) => Ok(Json(ApiResponse::success(replays))),
         Err(e) => {
             error!("Failed to list replays: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Internal server error".to_string())),
+            ))
+        }
+    }
+}
+
+// Safe Event Replay Handlers
+async fn start_safe_event_replay(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<uuid::Uuid>>, (StatusCode, Json<ApiResponse<()>>)> {
+    match state.safe_event_replay.start_safe_replay().await {
+        Ok(replay_id) => {
+            info!("Started safe event replay: {}", replay_id);
+            Ok(Json(ApiResponse::success(replay_id)))
+        }
+        Err(e) => {
+            error!("Failed to start safe event replay: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Failed to start safe event replay".to_string())),
+            ))
+        }
+    }
+}
+
+async fn get_safe_replay_status(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<crate::safe_event_replay::ReplayStatus>>, (StatusCode, Json<ApiResponse<()>>)> {
+    match state.safe_event_replay.get_replay_status(id).await {
+        Ok(Some(status)) => Ok(Json(ApiResponse::success(status))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("Safe replay not found".to_string())),
+        )),
+        Err(e) => {
+            error!("Failed to get safe replay status: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Internal server error".to_string())),
+            ))
+        }
+    }
+}
+
+async fn list_safe_replays(
+    State(state): State<AppState>,
+    Query(query): Query<ListReplaysQuery>,
+) -> Result<Json<ApiResponse<Vec<crate::safe_event_replay::ReplayStatus>>>, (StatusCode, Json<ApiResponse<()>>)> {
+    let limit = query.limit.unwrap_or(50).min(1000);
+    let offset = query.offset.unwrap_or(0);
+
+    match state.safe_event_replay.list_replays(limit, offset).await {
+        Ok(replays) => Ok(Json(ApiResponse::success(replays))),
+        Err(e) => {
+            error!("Failed to list safe replays: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error("Internal server error".to_string())),

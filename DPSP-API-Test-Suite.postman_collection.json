@@ -1,0 +1,1086 @@
+{
+	"info": {
+		"_postman_id": "dpsp-api-suite-2024",
+		"name": "DPSP API Test Suite",
+		"description": "Comprehensive API test suite for DFSP-Lite Payments platform including Payment Processor and Reconciliation Service APIs",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "dpsp-exporter"
+	},
+	"item": [
+		{
+			"name": "Payment Processor Service (Port 3001)",
+			"item": [
+				{
+					"name": "Authentication",
+					"item": [
+						{
+							"name": "Generate JWT Token",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"subject\": \"test-user-123\"\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/auth/token",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"auth",
+										"token"
+									]
+								},
+								"description": "Generate a JWT token for API authentication"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Health & Monitoring",
+					"item": [
+						{
+							"name": "Health Check",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{payment_processor_url}}/health",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"health"
+									]
+								},
+								"description": "Check the health status of the payment processor service"
+							},
+							"response": []
+						},
+						{
+							"name": "Metrics",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{payment_processor_url}}/metrics",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"metrics"
+									]
+								},
+								"description": "Get Prometheus metrics from the payment processor"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Transaction Management",
+					"item": [
+						{
+							"name": "Create Transaction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"external_id\": \"txn-{{$timestamp}}\",\n  \"amount\": 10000,\n  \"currency\": \"USD\",\n  \"from_account\": \"account-123\",\n  \"to_account\": \"account-456\",\n  \"description\": \"Test payment transaction\",\n  \"metadata\": {\n    \"customer_id\": \"cust-789\",\n    \"reference\": \"REF-{{$timestamp}}\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions"
+									]
+								},
+								"description": "Create a new transaction"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Transaction",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions/{{transaction_id}}",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions",
+										"{{transaction_id}}"
+									]
+								},
+								"description": "Get transaction details by ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Commit Transaction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions/{{transaction_id}}/commit",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions",
+										"{{transaction_id}}",
+										"commit"
+									]
+								},
+								"description": "Commit a pending transaction"
+							},
+							"response": []
+						},
+						{
+							"name": "Fail Transaction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions/{{transaction_id}}/fail",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions",
+										"{{transaction_id}}",
+										"fail"
+									]
+								},
+								"description": "Mark a transaction as failed"
+							},
+							"response": []
+						},
+						{
+							"name": "Cancel Transaction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions/{{transaction_id}}/cancel",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions",
+										"{{transaction_id}}",
+										"cancel"
+									]
+								},
+								"description": "Cancel a transaction"
+							},
+							"response": []
+						},
+						{
+							"name": "List Transactions",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/transactions?limit=10&offset=0",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transactions"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List transactions with pagination"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "User Management",
+					"item": [
+						{
+							"name": "Create User",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"test@example.com\",\n  \"name\": \"Test User\",\n  \"phone\": \"+1234567890\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"zip\": \"10001\",\n    \"country\": \"US\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/users",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"users"
+									]
+								},
+								"description": "Create a new user"
+							},
+							"response": []
+						},
+						{
+							"name": "Get User",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/users/{{user_id}}",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}"
+									]
+								},
+								"description": "Get user details by ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Verify User",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/users/{{user_id}}/verify",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}",
+										"verify"
+									]
+								},
+								"description": "Verify a user account"
+							},
+							"response": []
+						},
+						{
+							"name": "Get User Accounts",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/users/{{user_id}}/accounts",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"users",
+										"{{user_id}}",
+										"accounts"
+									]
+								},
+								"description": "Get all accounts for a user"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Account Management",
+					"item": [
+						{
+							"name": "Create Account",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"account_type\": \"CHECKING\",\n  \"currency\": \"USD\",\n  \"initial_balance\": 100000\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/accounts",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"accounts"
+									]
+								},
+								"description": "Create a new account"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Account",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{payment_processor_url}}/accounts/{{account_number}}",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"accounts",
+										"{{account_number}}"
+									]
+								},
+								"description": "Get account details by account number"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Payment Processing",
+					"item": [
+						{
+							"name": "Transfer Money",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"from_account\": \"account-123\",\n  \"to_account\": \"account-456\",\n  \"amount\": 5000,\n  \"description\": \"Test transfer\",\n  \"card_info\": {\n    \"pan\": \"4111111111111111\",\n    \"expiry_month\": 12,\n    \"expiry_year\": 2025,\n    \"cvv\": \"123\",\n    \"holder_name\": \"Test User\"\n  },\n  \"user_info\": {\n    \"user_id\": \"{{user_id}}\",\n    \"is_verified\": true\n  }\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/transfer",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"transfer"
+									]
+								},
+								"description": "Transfer money between accounts"
+							},
+							"response": []
+						},
+						{
+							"name": "Validate Card",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"pan\": \"4111111111111111\",\n  \"expiry_month\": 12,\n  \"expiry_year\": 2025,\n  \"cvv\": \"123\",\n  \"holder_name\": \"Test User\",\n  \"billing_address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"zip\": \"10001\",\n    \"country\": \"US\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/validate-card",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"validate-card"
+									]
+								},
+								"description": "Validate a payment card"
+							},
+							"response": []
+						},
+						{
+							"name": "Process Visa Payment",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"card_info\": {\n    \"pan\": \"4111111111111111\",\n    \"expiry_month\": 12,\n    \"expiry_year\": 2025,\n    \"cvv\": \"123\",\n    \"holder_name\": \"Test User\"\n  },\n  \"amount\": 2500,\n  \"currency\": \"USD\",\n  \"description\": \"Visa payment test\"\n}"
+								},
+								"url": {
+									"raw": "{{payment_processor_url}}/visa-payment",
+									"host": [
+										"{{payment_processor_url}}"
+									],
+									"path": [
+										"visa-payment"
+									]
+								},
+								"description": "Process payment through Visa API"
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"description": "Payment Processor Service APIs running on port 3001"
+		},
+		{
+			"name": "Reconciliation Service (Port 3002)",
+			"description": "Reconciliation Service APIs running on port 3002 with separate production and staging databases",
+			"item": [
+				{
+					"name": "Health & Monitoring",
+					"item": [
+						{
+							"name": "Health Check",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/health",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"health"
+									]
+								},
+								"description": "Check the health status of the reconciliation service including production and staging database connectivity"
+							},
+							"response": []
+						},
+						{
+							"name": "Metrics",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/metrics",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"metrics"
+									]
+								},
+								"description": "Get Prometheus metrics from the reconciliation service"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Report Management",
+					"item": [
+						{
+							"name": "Generate Report",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"period_start\": \"2024-01-01T00:00:00Z\",\n  \"period_end\": \"2024-01-31T23:59:59Z\"\n}"
+								},
+								"url": {
+									"raw": "{{reconciliation_url}}/reports/generate",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"reports",
+										"generate"
+									]
+								},
+								"description": "Generate a reconciliation report for a specific period"
+							},
+							"response": []
+						},
+						{
+							"name": "List Reports",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/reports?limit=10&offset=0",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"reports"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List all reconciliation reports"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Report",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/reports/{{report_id}}",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"reports",
+										"{{report_id}}"
+									]
+								},
+								"description": "Get a specific reconciliation report"
+							},
+							"response": []
+						},
+						{
+							"name": "Download Report CSV",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/reports/{{report_id}}/download",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"reports",
+										"{{report_id}}",
+										"download"
+									]
+								},
+								"description": "Download a reconciliation report as CSV"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Anomaly Management",
+					"item": [
+						{
+							"name": "List Anomalies",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/anomalies?severity=HIGH&limit=10&offset=0",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"anomalies"
+									],
+									"query": [
+										{
+											"key": "severity",
+											"value": "HIGH"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List anomalies with optional filtering by severity"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Anomaly",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/anomalies/{{anomaly_id}}",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"anomalies",
+										"{{anomaly_id}}"
+									]
+								},
+								"description": "Get details of a specific anomaly"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Daily Summaries",
+					"item": [
+						{
+							"name": "List Daily Summaries",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/daily-summaries?limit=30&offset=0",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"daily-summaries"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "30"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List daily reconciliation summaries"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Reconciliation",
+					"item": [
+						{
+							"name": "Trigger Reconciliation",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/reconcile",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"reconcile"
+									]
+								},
+								"description": "Manually trigger reconciliation process"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Event Replay (Legacy - Risky)",
+					"item": [
+						{
+							"name": "Start Event Replay",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/replay/start",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"replay",
+										"start"
+									]
+								},
+								"description": "⚠️ WARNING: This clears all reconciliation data! Use Safe Replay instead."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Replay Status",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/replay/{{replay_id}}",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"replay",
+										"{{replay_id}}"
+									]
+								},
+								"description": "Get status of a legacy replay operation"
+							},
+							"response": []
+						},
+						{
+							"name": "List Replays",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/replay?limit=10&offset=0",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"replay"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List all legacy replay operations"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Safe Event Replay (Recommended)",
+					"item": [
+						{
+							"name": "Start Safe Replay",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/safe-replay/start",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"safe-replay",
+										"start"
+									]
+								},
+								"description": "✅ SAFE: Start event replay using staging database approach with automatic backups"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Safe Replay Status",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/safe-replay/{{safe_replay_id}}",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"safe-replay",
+										"{{safe_replay_id}}"
+									]
+								},
+								"description": "Get status of a safe replay operation including backup information"
+							},
+							"response": []
+						},
+						{
+							"name": "List Safe Replays",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{reconciliation_url}}/safe-replay?limit=10&offset=0",
+									"host": [
+										"{{reconciliation_url}}"
+									],
+									"path": [
+										"safe-replay"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "List all safe replay operations with backup information"
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"description": "Reconciliation Service APIs running on port 3002"
+		},
+		{
+			"name": "Load Testing",
+			"item": [
+				{
+					"name": "Transaction Load Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"external_id\": \"load-test-{{$timestamp}}-{{$randomInt}}\",\n  \"amount\": {{$randomInt}},\n  \"currency\": \"USD\",\n  \"from_account\": \"load-test-account-{{$randomInt}}\",\n  \"to_account\": \"load-test-account-{{$randomInt}}\",\n  \"description\": \"Load test transaction {{$timestamp}}\",\n  \"metadata\": {\n    \"test_id\": \"load-test-{{$timestamp}}\",\n    \"batch\": \"{{$randomInt}}\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{payment_processor_url}}/transactions",
+							"host": [
+								"{{payment_processor_url}}"
+							],
+							"path": [
+								"transactions"
+							]
+						},
+						"description": "Load test endpoint for creating multiple transactions"
+					},
+					"response": []
+				}
+			],
+			"description": "Load testing endpoints for performance validation"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-generate timestamps and random values",
+					"pm.globals.set('timestamp', new Date().toISOString());",
+					"pm.globals.set('randomInt', Math.floor(Math.random() * 10000));"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Basic response validation",
+					"pm.test('Status code is successful', function () {",
+					"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+					"});",
+					"",
+					"pm.test('Response has success field', function () {",
+					"    const jsonData = pm.response.json();",
+					"    pm.expect(jsonData).to.have.property('success');",
+					"});",
+					"",
+					"pm.test('Response time is less than 2000ms', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(2000);",
+					"});",
+					"",
+					"// Extract IDs for subsequent requests",
+					"if (pm.response.json() && pm.response.json().data) {",
+					"    const data = pm.response.json().data;",
+					"    if (data.id) {",
+					"        pm.globals.set('transaction_id', data.id);",
+					"    }",
+					"    if (data.user_id) {",
+					"        pm.globals.set('user_id', data.user_id);",
+					"    }",
+					"    if (data.account_number) {",
+					"        pm.globals.set('account_number', data.account_number);",
+					"    }",
+					"    if (data.report_id) {",
+					"        pm.globals.set('report_id', data.report_id);",
+					"    }",
+					"    if (data.replay_id) {",
+					"        pm.globals.set('replay_id', data.replay_id);",
+					"    }",
+					"    if (data.safe_replay_id) {",
+					"        pm.globals.set('safe_replay_id', data.safe_replay_id);",
+					"    }",
+					"    if (data.anomaly_id) {",
+					"        pm.globals.set('anomaly_id', data.anomaly_id);",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "payment_processor_url",
+			"value": "http://localhost:3001",
+			"type": "string"
+		},
+		{
+			"key": "reconciliation_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string",
+			"description": "JWT token for authentication - generate using the auth endpoint"
+		},
+		{
+			"key": "transaction_id",
+			"value": "",
+			"type": "string",
+			"description": "Transaction ID - auto-populated from create transaction response"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string",
+			"description": "User ID - auto-populated from create user response"
+		},
+		{
+			"key": "account_number",
+			"value": "",
+			"type": "string",
+			"description": "Account number - auto-populated from create account response"
+		},
+		{
+			"key": "report_id",
+			"value": "",
+			"type": "string",
+			"description": "Report ID - auto-populated from generate report response"
+		},
+		{
+			"key": "replay_id",
+			"value": "",
+			"type": "string",
+			"description": "Legacy replay ID - auto-populated from start replay response"
+		},
+		{
+			"key": "safe_replay_id",
+			"value": "",
+			"type": "string",
+			"description": "Safe replay ID - auto-populated from start safe replay response"
+		},
+		{
+			"key": "anomaly_id",
+			"value": "",
+			"type": "string",
+			"description": "Anomaly ID - auto-populated from anomaly detection"
+		}
+	]
+}

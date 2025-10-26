@@ -147,3 +147,4 @@ build/
 target/
 .target/
 *.ps1
+*.rdb

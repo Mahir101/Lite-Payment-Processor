@@ -57,6 +57,33 @@ services:
       -c log_min_duration_statement=1000
       -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
 
+  # PostgreSQL Database for Reconciliation Staging (Safe Replay)
+  reconciliation-staging-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: reconciliation_staging
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5434:5432"
+    volumes:
+      - reconciliation_staging_db_data:/var/lib/postgresql/data
+      - ./migrations/002_reconciliation_schema.sql:/docker-entrypoint-initdb.d/001_reconciliation_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d reconciliation_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=1000
+      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+
   # Redis for caching and pub/sub
   redis:
     image: redis:7-alpine
@@ -102,11 +129,14 @@ services:
       - "3002:3002"
     environment:
       DATABASE_URL: postgresql://postgres:password@reconciliation-db:5432/reconciliation
+      STAGING_DATABASE_URL: postgresql://postgres:password@reconciliation-staging-db:5432/reconciliation_staging
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-secret-key-change-in-production
       RUST_LOG: info
     depends_on:
       reconciliation-db:
+        condition: service_healthy
+      reconciliation-staging-db:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -166,6 +196,7 @@ services:
 volumes:
   payment_db_data:
   reconciliation_db_data:
+  reconciliation_staging_db_data:
   redis_data:
   prometheus_data:
   grafana_data:

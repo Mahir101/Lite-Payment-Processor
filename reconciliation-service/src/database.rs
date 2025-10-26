@@ -10,20 +10,33 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct DatabaseService {
     pub pool: PgPool,
+    pub staging_pool: PgPool,
 }
 
 impl DatabaseService {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/reconciliation".to_string());
+        
+        let staging_database_url = std::env::var("STAGING_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/reconciliation_staging".to_string());
 
         let pool = PgPool::connect(&database_url).await?;
-        Ok(Self { pool })
+        let staging_pool = PgPool::connect(&staging_database_url).await?;
+        
+        Ok(Self { pool, staging_pool })
     }
 
     pub async fn health_check(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn staging_health_check(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query("SELECT 1")
+            .execute(&self.staging_pool)
             .await?;
         Ok(())
     }
