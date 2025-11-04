@@ -73,7 +73,7 @@ The Lite Payment Processor is a microservices-based payment processing system bu
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                          Payment Processor Service                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│  HTTP Router (Axum)                                                             │
+│  HTTP Router (Actix-web)                                                        │
 │  ├── Transaction Endpoints                                                      │
 │  ├── User Management Endpoints                                                  │
 │  ├── Account Management Endpoints                                               │
@@ -136,7 +136,7 @@ The Lite Payment Processor is a microservices-based payment processing system bu
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                        Reconciliation Service                                  │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│  HTTP Router (Axum)                                                             │
+│  HTTP Router (Actix-web)                                                        │
 │  ├── Report Management Endpoints                                               │
 │  ├── Anomaly Management Endpoints                                              │
 │  ├── Summary & Analysis Endpoints                                              │

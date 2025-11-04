@@ -23,21 +23,36 @@ The Lite Payment Processor is a comprehensive Rust-based microservices payment p
 - **Microservices Architecture**: Scalable service separation
 - **Event Sourcing**: Complete transaction audit trail
 - **Real-time Monitoring**: WebSocket-based live updates
-- **Fraud Detection**: Built-in security measures
+- **Fraud Detection**: Built-in and ML-based security measures
 - **Reconciliation**: Automated transaction verification
 - **Outbox Pattern**: Reliable event publishing
 - **Card Validation**: Luhn algorithm and fraud detection
 - **User Management**: Complete user and account management
 - **Visa API Integration**: External payment processing
+- **Stripe-like Features**: Complete payment processing suite
+  - **Refunds**: Full and partial refunds with reason tracking
+  - **Customers**: Customer management with metadata
+  - **Payment Methods**: Tokenized payment method storage (PCI compliant)
+  - **Webhooks**: Event delivery with signature verification
+  - **Subscriptions**: Recurring billing with trial periods
+  - **Disputes**: Chargeback and dispute management
+  - **Invoicing**: Invoice generation and management
+  - **Payouts**: Multi-method payout processing
+  - **Marketplace/Connect**: Multi-party payment flows
+  - **Payment Intents**: 3D Secure and payment confirmation flows
+  - **Multi-currency**: Currency conversion and exchange rates
+  - **Tax Calculation**: Automated tax computation
+  - **Rate Limiting**: API rate limiting and quotas
+  - **Test Mode**: Sandbox environment with test cards
 
 ### Technology Stack
 - **Language**: Rust
-- **Web Framework**: Axum
+- **Web Framework**: Actix-web
 - **Database**: PostgreSQL with SQLx
 - **Cache**: Redis
 - **Authentication**: JWT tokens
 - **Monitoring**: Prometheus metrics
-- **Real-time**: WebSocket connections
+- **Real-time**: WebSocket connections (Actix-web-actors)
 - **Containerization**: Docker & Docker Compose
 
 ## Architecture
@@ -79,17 +94,32 @@ The Lite Payment Processor is a comprehensive Rust-based microservices payment p
 - JWT-based authentication
 
 **Key Modules:**
-- `main.rs` - Application entry point and routing
+- `main.rs` - Application entry point and routing (Actix-web)
 - `auth.rs` - JWT token management
 - `card_validation.rs` - Card validation and fraud detection
 - `database.rs` - Database operations
 - `state_machine.rs` - Transaction state management
 - `user_management.rs` - User and account operations
 - `visa_api.rs` - Visa payment processing
-- `websocket.rs` - Real-time communication
+- `websocket.rs` - Real-time communication (Actix-web-actors)
 - `outbox.rs` - Event publishing
 - `metrics.rs` - Performance monitoring
 - `redis_client.rs` - Redis operations
+- `refunds.rs` - Refund processing and management
+- `customers.rs` - Customer lifecycle management
+- `payment_methods.rs` - Payment method tokenization and storage
+- `webhooks.rs` - Webhook creation, delivery, and signature verification
+- `subscriptions.rs` - Subscription and recurring billing
+- `disputes.rs` - Dispute and chargeback handling
+- `invoicing.rs` - Invoice generation and management
+- `payouts.rs` - Payout processing and transfers
+- `connect.rs` - Marketplace and Connect account management
+- `payment_intents.rs` - Payment Intent API with 3D Secure
+- `advanced_fraud.rs` - ML-based fraud detection
+- `currency.rs` - Multi-currency support and conversion
+- `tax.rs` - Tax calculation and compliance
+- `rate_limiting.rs` - API rate limiting middleware
+- `test_mode.rs` - Test mode and sandbox environment
 
 ### Reconciliation Service (Port 3002)
 
@@ -147,6 +177,88 @@ The Lite Payment Processor is a comprehensive Rust-based microservices payment p
 - `POST /transfer` - Transfer money
 - `POST /validate-card` - Validate card
 - `POST /visa-payment` - Process Visa payment
+
+#### Refunds
+- `POST /transactions/:id/refund` - Create refund
+- `GET /refunds/:id` - Get refund
+- `GET /transactions/:id/refunds` - List refunds for transaction
+
+#### Customers
+- `POST /customers` - Create customer
+- `GET /customers/:id` - Get customer
+- `PUT /customers/:id` - Update customer
+- `GET /customers` - List customers
+- `DELETE /customers/:id` - Delete customer
+
+#### Payment Methods
+- `POST /payment-methods` - Create payment method (tokenized)
+- `GET /payment-methods/:id` - Get payment method
+- `GET /payment-methods` - List payment methods
+- `DELETE /payment-methods/:id` - Delete payment method
+- `POST /customers/:customer_id/payment-methods/:id/default` - Set default payment method
+
+#### Webhooks
+- `POST /webhooks` - Create webhook endpoint
+- `GET /webhooks/:id` - Get webhook
+- `GET /webhooks` - List webhooks
+- `POST /webhook` - Receive webhook delivery
+
+#### Subscriptions
+- `POST /subscriptions` - Create subscription
+- `GET /subscriptions/:id` - Get subscription
+- `GET /subscriptions` - List subscriptions
+- `POST /subscriptions/:id/cancel` - Cancel subscription
+
+#### Disputes
+- `POST /disputes` - Create dispute
+- `GET /disputes/:id` - Get dispute
+- `GET /disputes` - List disputes
+- `POST /disputes/:id/submit-evidence` - Submit dispute evidence
+- `POST /disputes/:id/update-status` - Update dispute status
+
+#### Invoices
+- `POST /invoices` - Create invoice
+- `GET /invoices/:id` - Get invoice
+- `GET /invoices` - List invoices
+- `POST /invoices/:id/finalize` - Finalize invoice
+- `POST /invoices/:id/pay` - Mark invoice as paid
+- `GET /invoices/:id/line-items` - Get invoice line items
+
+#### Payouts
+- `POST /payouts` - Create payout
+- `GET /payouts/:id` - Get payout
+- `GET /payouts` - List payouts
+- `POST /payouts/:id/cancel` - Cancel payout
+
+#### Marketplace/Connect
+- `POST /connect/accounts` - Create Connect account
+- `GET /connect/accounts/:id` - Get Connect account
+- `POST /connect/accounts/:id/update` - Update Connect account
+- `POST /transfers` - Create transfer
+- `GET /transactions/:id/transfers` - List transfers for transaction
+
+#### Payment Intents
+- `POST /payment-intents` - Create payment intent
+- `GET /payment-intents/:id` - Get payment intent
+- `POST /payment-intents/:id/confirm` - Confirm payment intent
+- `POST /payment-intents/:id/cancel` - Cancel payment intent
+- `POST /payment-intents/:id/3d-secure` - Handle 3D Secure authentication
+
+#### Currency & Exchange Rates
+- `POST /currency/convert` - Convert currency
+- `GET /currency/exchange-rates` - Get exchange rate
+- `POST /currency/exchange-rates` - Set exchange rate
+- `GET /currency/supported` - Get supported currencies
+
+#### Tax Calculation
+- `POST /tax/calculate` - Calculate tax
+- `POST /tax/rates` - Create tax rate
+- `GET /tax/rates` - List tax rates
+
+#### Test Mode
+- `GET /test-mode/status` - Get test mode status
+- `POST /test-mode/enable` - Enable/disable test mode
+- `GET /test-mode/cards` - Get test card numbers
 
 ### Reconciliation Service API (Port 3002)
 
@@ -250,6 +362,26 @@ pub struct Account {
 - `users` - User information
 - `accounts` - Account data
 - `outbox_events` - Outbox pattern events
+- `refunds` - Refund records
+- `customers` - Customer data
+- `payment_methods` - Tokenized payment methods
+- `webhooks` - Webhook endpoint configurations
+- `webhook_events` - Webhook event deliveries
+- `subscriptions` - Subscription records
+- `subscription_items` - Subscription line items
+- `products` - Product catalog
+- `prices` - Pricing information
+- `disputes` - Dispute and chargeback records
+- `dispute_evidence` - Dispute evidence submissions
+- `invoices` - Invoice records
+- `invoice_line_items` - Invoice line items
+- `payouts` - Payout records
+- `connect_accounts` - Connect/marketplace accounts
+- `transfers` - Transfer records
+- `payment_intents` - Payment Intent records
+- `exchange_rates` - Currency exchange rates
+- `tax_rates` - Tax rate configurations
+- `api_rate_limits` - Rate limiting tracking
 
 #### Key Indexes
 - `idx_transactions_external_id` - External ID lookup
@@ -480,13 +612,46 @@ k6 run load-tests/reconciliation-test.js
 - Add request rate limiting
 - Monitor for suspicious activity
 
+## Stripe-like Features
+
+This payment processor now includes comprehensive Stripe-like functionality:
+
+### Payment Processing
+- **Payment Intents**: Two-step payment confirmation with 3D Secure support
+- **Payment Methods**: Secure tokenization of card data (PCI compliant)
+- **Customers**: Customer management with metadata and preferences
+- **Subscriptions**: Recurring billing with trial periods and proration
+
+### Financial Operations
+- **Refunds**: Full and partial refunds with reason tracking
+- **Payouts**: Multi-method payouts (bank account, card, instant)
+- **Transfers**: Marketplace transfers between accounts
+- **Invoicing**: Automated invoice generation and management
+
+### Business Features
+- **Marketplace/Connect**: Multi-party payment flows and account management
+- **Disputes**: Chargeback and dispute management with evidence submission
+- **Webhooks**: Reliable event delivery with signature verification
+- **Tax Calculation**: Automated tax computation with rate management
+
+### International Support
+- **Multi-currency**: Support for 100+ currencies with conversion
+- **Exchange Rates**: Real-time exchange rate management
+- **Tax Compliance**: Jurisdiction-based tax calculation
+
+### Developer Experience
+- **Test Mode**: Sandbox environment with test card numbers
+- **Rate Limiting**: API rate limiting with per-endpoint quotas
+- **Advanced Fraud Detection**: ML-based fraud detection patterns
+
 ## Future Enhancements
 
 - **Kubernetes Deployment**: Production-ready orchestration
-- **Advanced Analytics**: Machine learning-based anomaly detection
+- **Advanced Analytics**: Enhanced machine learning-based anomaly detection
 - **Multi-Region Support**: Geographic distribution and failover
-- **API Rate Limiting**: Advanced rate limiting with Redis
+- **Enhanced Rate Limiting**: Redis-based distributed rate limiting
 - **Audit Logging**: Comprehensive audit trail with encryption
+- **PCI DSS Level 1**: Full PCI compliance certification
 
 ## License
 

@@ -430,6 +430,516 @@ Authorization: Bearer <jwt_token>
 
 ---
 
+## Refund Endpoints
+
+### POST /transactions/{id}/refund
+**Description**: Creates a refund for a transaction (full or partial)
+
+**Path Parameters**:
+- `id`: Transaction UUID
+
+**Request Body**:
+```json
+{
+  "amount": 5000,
+  "reason": "requested_by_customer",
+  "metadata": {
+    "reason_note": "Customer requested refund"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+    "amount": 5000,
+    "status": "PENDING",
+    "reason": "RequestedByCustomer",
+    "created_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### GET /refunds/{id}
+**Description**: Retrieves a refund by ID
+
+**Path Parameters**:
+- `id`: Refund UUID
+
+### GET /transactions/{id}/refunds
+**Description**: Lists all refunds for a transaction
+
+**Path Parameters**:
+- `id`: Transaction UUID
+
+---
+
+## Customer Endpoints
+
+### POST /customers
+**Description**: Creates a new customer
+
+**Request Body**:
+```json
+{
+  "email": "customer@example.com",
+  "phone": "+1234567890",
+  "name": "John Doe",
+  "description": "Premium customer",
+  "metadata": {
+    "loyalty_tier": "gold"
+  }
+}
+```
+
+### GET /customers/{id}
+**Description**: Retrieves a customer by ID
+
+### PUT /customers/{id}
+**Description**: Updates customer information
+
+### GET /customers
+**Description**: Lists customers with pagination
+
+**Query Parameters**:
+- `limit`: Maximum results (default: 100, max: 1000)
+- `offset`: Skip results (default: 0)
+
+### DELETE /customers/{id}
+**Description**: Deletes a customer
+
+---
+
+## Payment Method Endpoints
+
+### POST /payment-methods
+**Description**: Creates a tokenized payment method (PCI compliant)
+
+**Request Body**:
+```json
+{
+  "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "card",
+  "card_info": {
+    "pan": "4242424242424242",
+    "expiry_month": 12,
+    "expiry_year": 2025,
+    "cvv": "123",
+    "cardholder_name": "John Doe",
+    "billing_address": {
+      "line1": "123 Main St",
+      "city": "New York",
+      "postal_code": "10001",
+      "country": "US"
+    }
+  },
+  "is_default": true
+}
+```
+
+### GET /payment-methods/{id}
+**Description**: Retrieves a payment method by ID
+
+### GET /payment-methods
+**Description**: Lists payment methods (optionally filtered by customer)
+
+**Query Parameters**:
+- `customer_id`: Filter by customer UUID
+
+### DELETE /payment-methods/{id}
+**Description**: Deletes a payment method
+
+### POST /customers/{customer_id}/payment-methods/{id}/default
+**Description**: Sets a payment method as default for a customer
+
+---
+
+## Webhook Endpoints
+
+### POST /webhooks
+**Description**: Creates a webhook endpoint
+
+**Request Body**:
+```json
+{
+  "url": "https://example.com/webhook",
+  "events": ["transaction.created", "refund.created"],
+  "metadata": {}
+}
+```
+
+### GET /webhooks/{id}
+**Description**: Retrieves a webhook configuration
+
+### GET /webhooks
+**Description**: Lists all webhook configurations
+
+### POST /webhook
+**Description**: Receives webhook delivery (for testing)
+
+---
+
+## Subscription Endpoints
+
+### POST /subscriptions
+**Description**: Creates a subscription for recurring billing
+
+**Request Body**:
+```json
+{
+  "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+  "price_id": "550e8400-e29b-41d4-a716-446655440000",
+  "trial_days": 14,
+  "metadata": {}
+}
+```
+
+### GET /subscriptions/{id}
+**Description**: Retrieves a subscription by ID
+
+### GET /subscriptions
+**Description**: Lists subscriptions (optionally filtered by customer/status)
+
+**Query Parameters**:
+- `customer_id`: Filter by customer UUID
+- `status`: Filter by status (INCOMPLETE, ACTIVE, CANCELED, TRIALING)
+
+### POST /subscriptions/{id}/cancel
+**Description**: Cancels a subscription
+
+**Request Body**:
+```json
+{
+  "at_period_end": false
+}
+```
+
+---
+
+## Dispute Endpoints
+
+### POST /disputes
+**Description**: Creates a dispute/chargeback record
+
+**Request Body**:
+```json
+{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "reason": "FRAUDULENT",
+  "metadata": {}
+}
+```
+
+### GET /disputes/{id}
+**Description**: Retrieves a dispute by ID
+
+### GET /disputes
+**Description**: Lists disputes with optional status filter
+
+**Query Parameters**:
+- `status`: Filter by status (NEEDS_RESPONSE, UNDER_REVIEW, WON, LOST)
+- `limit`: Maximum results (default: 100)
+- `offset`: Skip results (default: 0)
+
+### POST /disputes/{id}/submit-evidence
+**Description**: Submits evidence for a dispute
+
+### POST /disputes/{id}/update-status
+**Description**: Updates dispute status (WON, LOST, CHARGE_REFUNDED)
+
+---
+
+## Invoice Endpoints
+
+### POST /invoices
+**Description**: Creates an invoice
+
+**Request Body**:
+```json
+{
+  "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+  "subscription_id": "550e8400-e29b-41d4-a716-446655440000",
+  "line_items": [
+    {
+      "description": "Monthly subscription",
+      "amount": 10000,
+      "quantity": 1
+    }
+  ],
+  "due_date": "2024-02-01T00:00:00Z"
+}
+```
+
+### GET /invoices/{id}
+**Description**: Retrieves an invoice by ID
+
+### GET /invoices
+**Description**: Lists invoices with optional filters
+
+**Query Parameters**:
+- `customer_id`: Filter by customer UUID
+- `status`: Filter by status (DRAFT, OPEN, PAID)
+- `limit`: Maximum results (default: 100)
+- `offset`: Skip results (default: 0)
+
+### POST /invoices/{id}/finalize
+**Description**: Finalizes a draft invoice
+
+### POST /invoices/{id}/pay
+**Description**: Marks an invoice as paid
+
+### GET /invoices/{id}/line-items
+**Description**: Retrieves line items for an invoice
+
+---
+
+## Payout Endpoints
+
+### POST /payouts
+**Description**: Creates a payout
+
+**Request Body**:
+```json
+{
+  "account_id": "550e8400-e29b-41d4-a716-446655440000",
+  "amount": 50000,
+  "currency": "USD",
+  "payout_method": "bank_account",
+  "metadata": {}
+}
+```
+
+### GET /payouts/{id}
+**Description**: Retrieves a payout by ID
+
+### GET /payouts
+**Description**: Lists payouts with optional filters
+
+**Query Parameters**:
+- `account_id`: Filter by account UUID
+- `status`: Filter by status (PENDING, PAID, FAILED)
+- `limit`: Maximum results (default: 100)
+- `offset`: Skip results (default: 0)
+
+### POST /payouts/{id}/cancel
+**Description**: Cancels a pending payout
+
+---
+
+## Marketplace/Connect Endpoints
+
+### POST /connect/accounts
+**Description**: Creates a Connect account for marketplace
+
+**Request Body**:
+```json
+{
+  "email": "merchant@example.com",
+  "country": "US",
+  "account_type": "express",
+  "metadata": {}
+}
+```
+
+### GET /connect/accounts/{id}
+**Description**: Retrieves a Connect account by ID
+
+### POST /connect/accounts/{id}/update
+**Description**: Updates Connect account status
+
+**Request Body**:
+```json
+{
+  "charges_enabled": true,
+  "payouts_enabled": true,
+  "details_submitted": true
+}
+```
+
+### POST /transfers
+**Description**: Creates a transfer to a Connect account
+
+**Request Body**:
+```json
+{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "destination_account_id": "550e8400-e29b-41d4-a716-446655440000",
+  "amount": 10000,
+  "currency": "USD"
+}
+```
+
+### GET /transactions/{id}/transfers
+**Description**: Lists transfers for a transaction
+
+---
+
+## Payment Intent Endpoints
+
+### POST /payment-intents
+**Description**: Creates a Payment Intent (two-step payment confirmation)
+
+**Request Body**:
+```json
+{
+  "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+  "payment_method_id": "550e8400-e29b-41d4-a716-446655440000",
+  "amount": 10000,
+  "currency": "USD",
+  "confirmation_method": "automatic",
+  "metadata": {}
+}
+```
+
+### GET /payment-intents/{id}
+**Description**: Retrieves a Payment Intent by ID
+
+### POST /payment-intents/{id}/confirm
+**Description**: Confirms a Payment Intent
+
+**Request Body**:
+```json
+{
+  "payment_method_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### POST /payment-intents/{id}/cancel
+**Description**: Cancels a Payment Intent
+
+### POST /payment-intents/{id}/3d-secure
+**Description**: Handles 3D Secure authentication result
+
+**Request Body**:
+```json
+{
+  "authentication_result": true
+}
+```
+
+---
+
+## Currency & Exchange Rate Endpoints
+
+### POST /currency/convert
+**Description**: Converts amount between currencies
+
+**Request Body**:
+```json
+{
+  "amount": 10000,
+  "from_currency": "USD",
+  "to_currency": "EUR"
+}
+```
+
+### GET /currency/exchange-rates
+**Description**: Gets exchange rate between currencies
+
+**Query Parameters**:
+- `base_currency`: Base currency code
+- `target_currency`: Target currency code
+
+### POST /currency/exchange-rates
+**Description**: Sets or updates exchange rate
+
+**Request Body**:
+```json
+{
+  "base_currency": "USD",
+  "target_currency": "EUR",
+  "rate": 0.92
+}
+```
+
+### GET /currency/supported
+**Description**: Lists all supported currencies
+
+---
+
+## Tax Calculation Endpoints
+
+### POST /tax/calculate
+**Description**: Calculates tax for an amount
+
+**Request Body**:
+```json
+{
+  "amount": 10000,
+  "country": "US",
+  "jurisdiction": "NY"
+}
+```
+
+### POST /tax/rates
+**Description**: Creates a tax rate
+
+**Request Body**:
+```json
+{
+  "display_name": "Sales Tax",
+  "percentage": 8.5,
+  "inclusive": false,
+  "country": "US",
+  "jurisdiction": "NY"
+}
+```
+
+### GET /tax/rates
+**Description**: Lists tax rates
+
+**Query Parameters**:
+- `country`: Filter by country
+- `active_only`: Show only active rates (default: true)
+
+---
+
+## Test Mode Endpoints
+
+### GET /test-mode/status
+**Description**: Gets test mode status
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "test_mode_enabled": true
+  }
+}
+```
+
+### POST /test-mode/enable
+**Description**: Enables or disables test mode
+
+**Request Body**:
+```json
+{
+  "enabled": true
+}
+```
+
+### GET /test-mode/cards
+**Description**: Gets test card numbers for testing
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "success": ["4242424242424242"],
+    "decline": ["4000000000000002"],
+    "insufficient_funds": ["4000000000009995"]
+  }
+}
+```
+
+---
+
 ## Reconciliation Service API (Port 3002)
 
 ### Base URL
@@ -714,11 +1224,29 @@ All error responses follow this format:
 
 ## Rate Limiting
 
-Currently, no rate limiting is implemented. In production, consider implementing:
-- Request rate limiting per IP
-- API key-based rate limiting
-- User-based rate limiting
-- Endpoint-specific rate limits
+Rate limiting is now implemented using PostgreSQL-based tracking. Limits are enforced per API key and endpoint.
+
+### Rate Limit Headers
+All responses include rate limit headers:
+- `X-RateLimit-Remaining`: Number of requests remaining in the current window
+- `X-RateLimit-Reset`: Unix timestamp when the rate limit window resets
+
+### Rate Limit Defaults
+- Default limit: 100 requests per 60 seconds per API key
+- Rate limit window: 60 seconds (configurable)
+- Endpoint-specific limits can be configured
+
+### Rate Limit Exceeded Response
+When rate limit is exceeded, the API returns:
+- Status Code: `429 Too Many Requests`
+- Response Body:
+```json
+{
+  "error": "Rate limit exceeded",
+  "remaining": 0,
+  "reset_at": "2024-01-15T10:31:00Z"
+}
+```
 
 ---
 
