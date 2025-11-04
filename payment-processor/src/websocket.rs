@@ -1,11 +1,5 @@
-use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
-    },
-    response::Response,
-};
-use futures_util::{sink::SinkExt, stream::StreamExt};
+use actix_web::{web, HttpRequest, HttpResponse, Error};
+use actix_web_actors::ws;
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -73,80 +67,71 @@ pub struct MetricsData {
     pub error_rate: f64,
 }
 
-pub async fn websocket_handler(
-    ws: WebSocketUpgrade,
-    State(ws_manager): State<Arc<WebSocketManager>>,
-) -> Response {
-    info!("WebSocket upgrade request received");
-    ws.on_upgrade(|socket| websocket_connection(socket, ws_manager))
+pub struct WebSocketActor {
+    ws_manager: Arc<WebSocketManager>,
 }
 
-async fn websocket_connection(socket: WebSocket, ws_manager: Arc<WebSocketManager>) {
-    let (mut sender, mut receiver) = socket.split();
-    let mut rx = ws_manager.subscribe();
-
-    info!("WebSocket client connected");
-
-    // Send initial metrics
-    let initial_metrics = MetricsData {
-        total_transactions: 0,
-        pending_transactions: 0,
-        committed_transactions: 0,
-        failed_transactions: 0,
-        total_amount: 0,
-        throughput: 0.0,
-        avg_latency: 0.0,
-        p95_latency: 0.0,
-        error_rate: 0.0,
-    };
-
-    if let Ok(msg) = serde_json::to_string(&serde_json::json!({
-        "type": "metrics_update",
-        "metrics": initial_metrics
-    })) {
-        if let Err(e) = sender.send(Message::Text(msg)).await {
-            warn!("Failed to send initial metrics: {}", e);
-            return;
-        }
-    } else {
-        warn!("Failed to serialize initial metrics");
-        return;
+impl WebSocketActor {
+    pub fn new(ws_manager: Arc<WebSocketManager>) -> Self {
+        Self { ws_manager }
     }
+}
 
-    // Handle incoming messages and broadcast messages
-    tokio::select! {
-        _ = async {
+impl actix::Actor for WebSocketActor {
+    type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        info!("WebSocket client connected");
+        
+        // Subscribe to broadcast channel
+        let mut rx = self.ws_manager.subscribe();
+        let addr = ctx.address();
+        
+        // Spawn task to receive broadcast messages
+        actix::spawn(async move {
             while let Ok(msg) = rx.recv().await {
-                if let Err(e) = sender.send(Message::Text(msg)).await {
-                    warn!("Failed to send WebSocket message: {}", e);
+                if let Err(_) = addr.send(WebSocketMessage(msg)).await {
                     break;
                 }
             }
-        } => {},
-        _ = async {
-            while let Some(msg) = receiver.next().await {
-                match msg {
-                    Ok(msg) => {
-                        match msg {
-                            Message::Text(text) => {
-                                info!("Received WebSocket message: {}", text);
-                            }
-                            Message::Close(_) => {
-                                info!("WebSocket client disconnected");
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                    Err(e) => {
-                        warn!("WebSocket receive error: {}", e);
-                        break;
-                    }
-                }
-            }
-        } => {}
+        });
     }
-
-    info!("WebSocket connection closed");
 }
 
+impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketActor {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => {
+                info!("Received WebSocket message: {}", text);
+            }
+            Ok(ws::Message::Close(reason)) => {
+                info!("WebSocket client disconnected: {:?}", reason);
+                ctx.stop();
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+struct WebSocketMessage(String);
+
+impl actix::Handler<WebSocketMessage> for WebSocketActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: WebSocketMessage, ctx: &mut Self::Context) {
+        ctx.text(msg.0);
+    }
+}
+
+pub async fn websocket_handler(
+    req: HttpRequest,
+    stream: web::Payload,
+    state: web::Data<crate::AppState>,
+) -> Result<HttpResponse, Error> {
+    let actor = WebSocketActor::new(state.ws_manager.clone());
+    let resp = ws::start(actor, &req, stream)?;
+    Ok(resp)
+}
